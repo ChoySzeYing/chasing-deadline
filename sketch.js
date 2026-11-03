@@ -1,218 +1,157 @@
 let player;
 let tasks = [];
-let hazards = [];
 let restSpots = [];
-
-let energy = 100;
-let taskProgress = 0;
-const TASK_GOAL = 100;
-let gameState = "start"; // start / play / win / lose
-let timer = 0;
-
-class Player {
-  constructor() {
-    this.x = width / 2;
-    this.y = height / 2;
-    this.r = 14;
-    this.speed = 4.2;
-  }
-  update() {
-    if (keyIsDown(87) || keyIsDown(UP_ARROW)) this.y -= this.speed;
-    if (keyIsDown(83) || keyIsDown(DOWN_ARROW)) this.y += this.speed;
-    if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) this.x -= this.speed;
-    if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) this.x += this.speed;
-
-    this.x = constrain(this.x, this.r, width - this.r);
-    this.y = constrain(this.y, this.r, height - this.r);
-  }
-  draw() {
-    noStroke();
-    fill(220, 235, 255);
-    circle(this.x, this.y, this.r * 2);
-  }
-}
-
-class TaskPoint {
-  constructor() {
-    this.x = random(80, width - 80);
-    this.y = random(80, height - 80);
-    this.r = 22;
-    this.gain = 0.6;
-  }
-  draw() {
-    noStroke();
-    fill(70, 140, 255, 190);
-    circle(this.x, this.y, this.r * 2);
-  }
-}
-
-class Hazard {
-  constructor() {
-    this.x = random(width);
-    this.y = random(height);
-    this.vx = random(-2.2, 2.2);
-    this.vy = random(-2.2, 2.2);
-    this.r = 26;
-  }
-  update() {
-    this.x += this.vx;
-    this.y += this.vy;
-    if (this.x < this.r || this.x > width - this.r) this.vx *= -1;
-    if (this.y < this.r || this.y > height - this.r) this.vy *= -1;
-  }
-  draw() {
-    noStroke();
-    fill(255, 80, 90, 170);
-    circle(this.x, this.y, this.r * 2);
-  }
-}
-
-class RestSpot {
-  constructor() {
-    this.x = random(80, width - 80);
-    this.y = random(80, height - 80);
-    this.r = 20;
-  }
-  draw() {
-    noStroke();
-    fill(90, 220, 130, 180);
-    circle(this.x, this.y, this.r * 2);
-  }
-}
+let stressors = [];
+let energy;
+let taskProgress;
+let gameStarted = false;
+let gameOver = false;
+let win = false;
 
 function setup() {
-  createCanvas(900, 620).parent("container");
+  createCanvas(800, 600);
   resetGame();
 }
 
 function resetGame() {
-  player = new Player();
-  energy = 100;
+  player = createVector(width / 2, height / 2);
+  energy = 300;
   taskProgress = 0;
-  timer = 0;
+  gameOver = false;
+  win = false;
+
   tasks = [];
-  hazards = [];
   restSpots = [];
-  for (let i = 0; i < 5; i++) tasks.push(new TaskPoint());
-  for (let i = 0; i < 3; i++) hazards.push(new Hazard());
-  for (let i = 0; i < 2; i++) restSpots.push(new RestSpot());
-  gameState = "play";
+  stressors = [];
+
+  for (let i = 0; i < 6; i++) {
+    tasks.push(createVector(random(50, width - 50), random(50, height - 50)));
+  }
+  for (let i = 0; i < 3; i++) {
+    restSpots.push(createVector(random(50, width - 50), random(50, height - 50)));
+  }
+  for (let i = 0; i < 8; i++) {
+    let s = createVector(random(50, width - 50), random(50, height - 50));
+    s.v = createVector(random(-2, 2), random(-2, 2));
+    stressors.push(s);
+  }
 }
 
 function draw() {
-  background(12, 14, 28, 28);
+  background(20);
 
-  if (gameState === "start") {
-    drawStartScreen();
-    return;
-  }
-  if (gameState === "win") {
-    drawWinScreen();
-    return;
-  }
-  if (gameState === "lose") {
-    drawLoseScreen();
+  if (!gameStarted) {
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(24);
+    text("Press SPACE to start", width / 2, height / 2);
     return;
   }
 
-  timer++;
-  energy -= 0.022;
-
-  if (timer % 320 === 0 && hazards.length < 7) {
-    hazards.push(new Hazard());
+  if (gameOver) {
+    fill(255, 80, 80);
+    textAlign(CENTER, CENTER);
+    textSize(32);
+    text("Burnout! Press SPACE to restart", width / 2, height / 2);
+    return;
   }
 
-  player.update();
+  if (win) {
+    fill(80, 255, 120);
+    textAlign(CENTER, CENTER);
+    textSize(32);
+    text("You finished all tasks! Press SPACE", width / 2, height / 2);
+    return;
+  }
 
-  for (let t of tasks) {
-    t.draw();
-    if (dist(player.x, player.y, t.x, t.y) < t.r + player.r) {
-      taskProgress += t.gain;
+  // 玩家移動，按住就會連續郁
+  let speed = 4;
+  if (keyIsDown(87) || keyIsDown(UP_ARROW)) player.y -= speed;
+  if (keyIsDown(83) || keyIsDown(DOWN_ARROW)) player.y += speed;
+  if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) player.x -= speed;
+  if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) player.x += speed;
+
+  // 唔會走出畫面
+  player.x = constrain(player.x, 20, width - 20);
+  player.y = constrain(player.y, 20, height - 20);
+
+  // 紅點周圍撞牆彈返轉頭
+  for (let s of stressors) {
+    s.add(s.v);
+    if (s.x < 20 || s.x > width - 20) s.v.x *= -1;
+    if (s.y < 20 || s.y > height - 20) s.v.y *= -1;
+  }
+
+  // 撿藍色任務點
+  for (let i = tasks.length - 1; i >= 0; i--) {
+    let t = tasks[i];
+    if (dist(player.x, player.y, t.x, t.y) < 28) {
+      taskProgress += 20;
+      tasks.splice(i, 1);
     }
   }
 
-  for (let h of hazards) {
-    h.update();
-    h.draw();
-    if (dist(player.x, player.y, h.x, h.y) < h.r + player.r) {
-      energy -= 0.6;
-    }
-  }
-
+  // 綠點回能量
   for (let r of restSpots) {
-    r.draw();
-    if (dist(player.x, player.y, r.x, r.y) < r.r + player.r) {
-      energy += 0.18;
+    if (dist(player.x, player.y, r.x, r.y) < 28) {
+      energy += 0.6;
     }
   }
 
-  player.draw();
-  drawUI();
+  // 撞到紅點扣能量
+  for (let s of stressors) {
+    if (dist(player.x, player.y, s.x, s.y) < 28) {
+      energy -= 1.2;
+    }
+  }
 
-  if (energy <= 0) gameState = "lose";
-  if (taskProgress >= TASK_GOAL) gameState = "win";
-}
+  energy -= 0.12;
+  energy = constrain(energy, 0, 400);
+  taskProgress = constrain(taskProgress, 0, 100);
 
-function drawUI() {
+  if (energy <= 0) gameOver = true;
+  if (taskProgress >= 100) win = true;
+
+  // 畫晒所有圓圈
   noStroke();
+  for (let t of tasks) {
+    fill(60, 140, 255);
+    circle(t.x, t.y, 26);
+  }
+  for (let r of restSpots) {
+    fill(60, 220, 90);
+    circle(r.x, r.y, 26);
+  }
+  for (let s of stressors) {
+    fill(230, 40, 40);
+    circle(s.x, s.y, 30);
+  }
+
+  fill(240);
+  circle(player.x, player.y, 22);
+
+  // UI：能量同任務條
   fill(255);
+  textAlign(LEFT, TOP);
   textSize(16);
-  text(`Energy: ${energy.toFixed(1)}`, 20, 28);
-  text(`Task: ${taskProgress.toFixed(1)} / ${TASK_GOAL}`, 20, 52);
+  text(`Energy: ${energy.toFixed(1)}`, 12, 12);
+  text(`Task: ${taskProgress.toFixed(1)} / 100`, 12, 34);
 
-  push();
-  fill(40, 40, 40);
-  rect(18, 62, 164, 14);
-  fill(energy > 30 ? (energy > 60 ? "#8cf" : "#ffd") : "#f66");
-  rect(20, 64, map(energy, 0, 100, 0, 160), 10);
-  pop();
-}
-
-function drawStartScreen() {
-  background(8, 10, 22);
-  fill(255);
-  textAlign(CENTER, CENTER);
-  textSize(36);
-  text("Chasing Deadline", width / 2, height / 2 - 60);
-  textSize(18);
-  text("WASD / Arrow keys to move", width / 2, height / 2 - 10);
-  text("Blue = Tasks | Red = Stress | Green = Rest", width / 2, height / 2 + 20);
-  textSize(16);
-  fill("#aaa");
-  text("Press SPACE to start", width / 2, height / 2 + 70);
-}
-
-function drawWinScreen() {
-  background(10, 22, 18);
-  fill(160, 255, 200);
-  textAlign(CENTER, CENTER);
-  textSize(42);
-  text("You made it!", width / 2, height / 2 - 20);
-  textSize(20);
-  text("Deadline survived", width / 2, height / 2 + 25);
-  fill("#ccc");
-  textSize(16);
-  text("Press SPACE to play again", width / 2, height / 2 + 70);
-}
-
-function drawLoseScreen() {
-  background(22, 10, 12);
-  fill(255, 140, 140);
-  textAlign(CENTER, CENTER);
-  textSize(42);
-  text("Burnout", width / 2, height / 2 - 20);
-  textSize(20);
-  text("Your energy ran out", width / 2, height / 2 + 25);
-  fill("#ccc");
-  textSize(16);
-  text("Press SPACE to try again", width / 2, height / 2 + 70);
+  noFill();
+  stroke(80, 160, 255);
+  strokeWeight(5);
+  rect(10, 52, 300, 14);
+  fill(80, 160, 255);
+  noStroke();
+  rect(10, 52, map(taskProgress, 0, 100, 0, 300), 14);
 }
 
 function keyPressed() {
-  if (keyCode === 32) {
-    if (gameState === "start" || gameState === "win" || gameState === "lose") {
+  if (key === " ") {
+    if (!gameStarted) {
+      gameStarted = true;
+    } else if (gameOver || win) {
       resetGame();
-      gameState = "play";
     }
   }
 }
