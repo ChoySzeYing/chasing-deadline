@@ -3,9 +3,9 @@ let rows = 15;
 let w = 48;
 
 let maze = [];
-let player = { x: 1, y: 1 };
+let player = { x: 1, y: 1, dir: 0 };
 let goal = { x: 19, y: 13 };
-let gameState = "playing";
+let gameState = "start"; // start / playing / win
 let startTime = 0;
 let elapsedTime = 0;
 
@@ -17,11 +17,15 @@ let audioStarted = false;
 function setup() {
   createCanvas(cols * w, rows * w);
   initMaze();
-  startTime = millis();
 }
 
 function draw() {
   drawBackground();
+
+  if (gameState === "start") {
+    drawStartScreen();
+    return;
+  }
 
   if (gameState === "playing") {
     elapsedTime = floor((millis() - startTime) / 1000);
@@ -33,7 +37,6 @@ function draw() {
 
   if (gameState === "win") {
     drawWinScreen();
-    noLoop();
   }
 }
 
@@ -59,7 +62,7 @@ function initAudio() {
 }
 
 function playBGM() {
-  if (!bgOsc) return;
+  if (!bgOsc || gameState !== "playing") return;
   let notes = [130.81, 146.83, 164.81, 196, 164.81, 146.83];
   let i = 0;
   function next() {
@@ -88,7 +91,6 @@ function playWinSound() {
 }
 
 function drawBackground() {
-  // 深藍星點背景
   background(8, 12, 24);
   noStroke();
   for (let i = 0; i < 90; i++) {
@@ -98,8 +100,6 @@ function drawBackground() {
     fill(180, 210, 255, 40 + tw * 60);
     circle(sx, sy, 1.2 + tw);
   }
-
-  // 遠處山影
   fill(18, 28, 48, 180);
   noStroke();
   beginShape();
@@ -110,13 +110,62 @@ function drawBackground() {
   vertex(width, height);
   vertex(0, height);
   endShape(CLOSE);
-
-  // 迷宮外圍裝飾框
   noFill();
   stroke(80, 120, 200, 140);
   strokeWeight(4);
   rect(8, 8, width - 16, height - 16, 18);
   noStroke();
+}
+
+function drawStartScreen() {
+  fill(0, 0, 0, 160);
+  rect(0, 0, width, height);
+  textAlign(CENTER, CENTER);
+
+  fill(255, 220, 100);
+  textSize(44);
+  text("迷宮探險", width / 2, height / 2 - 80);
+
+  fill(220);
+  textSize(20);
+  text("方向鍵移動，搵到寶石就勝利", width / 2, height / 2 - 30);
+
+  fill(100, 200, 255);
+  textSize(22);
+  let blink = sin(frameCount * 0.08) > 0;
+  if (blink) {
+    text("按 Enter 開始遊戲", width / 2, height / 2 + 20);
+  }
+
+  fill(160);
+  textSize(16);
+  text("按 R 隨時重新開始", width / 2, height / 2 + 70);
+}
+
+function drawWinScreen() {
+  fill(0, 0, 0, 180);
+  rect(0, 0, width, height);
+  textAlign(CENTER, CENTER);
+
+  fill(255, 215, 90);
+  rectMode(CENTER);
+  rect(width / 2, height / 2, 360, 200, 22);
+  rectMode(CORNER);
+
+  fill(30, 30, 50);
+  textSize(34);
+  text("寶石取得！", width / 2, height / 2 - 40);
+
+  fill(60, 60, 90);
+  textSize(18);
+  text("完成時間：" + elapsedTime + " 秒", width / 2, height / 2);
+
+  fill(80, 80, 110);
+  textSize(18);
+  let blink = sin(frameCount * 0.08) > 0;
+  if (blink) {
+    text("按 Enter / R 再玩一次", width / 2, height / 2 + 50);
+  }
 }
 
 function initMaze() {
@@ -126,11 +175,9 @@ function initMaze() {
       maze[y][x] = 1;
     }
   }
-
   let stack = [];
   maze[1][1] = 0;
   stack.push({ x: 1, y: 1 });
-
   while (stack.length > 0) {
     let current = stack[stack.length - 1];
     let neighbors = getUnvisitedNeighbors(current.x, current.y);
@@ -162,50 +209,29 @@ function drawMaze() {
     for (let x = 0; x < cols; x++) {
       let cellX = x * w;
       let cellY = y * w;
-
       if (maze[y][x] === 1) {
-        // 石牆主體
         fill(42, 54, 82);
         noStroke();
         rect(cellX, cellY, w, w);
-
-        // 石牆頂部高光
         fill(64, 82, 120);
         rect(cellX, cellY, w, 6);
-
-        // 石牆底部陰影
         fill(24, 34, 56);
         rect(cellX, cellY + w - 6, w, 6);
-
-        // 石磚紋理
         stroke(28, 40, 66);
         strokeWeight(1);
-        for (let i = 8; i < w; i += 12) {
-          line(cellX + i, cellY, cellX + i, cellY + w);
-        }
-        for (let j = 10; j < w; j += 14) {
-          line(cellX, cellY + j, cellX + w, cellY + j);
-        }
-      } else {
-        // 地面
-        fill(22, 32, 54);
+        for (let i = 8; i < w; i += 12) line(cellX + i, cellY, cellX + i, cellY + w);
+        for (let j = 10; j < w; j += 14) line(cellX, cellY + j, cellX + w, cellY + j);
         noStroke();
+      } else {
+        fill(22, 32, 54);
         rect(cellX, cellY, w, w);
-
-        // 地面格線
         stroke(28, 42, 72);
         strokeWeight(1);
         rect(cellX + 1, cellY + 1, w - 2, w - 2);
-
-        // 地面小細節
         noStroke();
-        fill(32, 48, 82);
-        rect(cellX + 6, cellY + 6, 4, 4);
-        rect(cellX + w - 12, cellY + w - 12, 4, 4);
       }
     }
   }
-
   drawGoal();
 }
 
@@ -213,175 +239,98 @@ function drawGoal() {
   let x = goal.x * w + w / 2;
   let y = goal.y * w + w / 2;
   let pulse = sin(frameCount * 0.08) * 4;
-
-  // 寶石光圈
   noStroke();
   fill(255, 215, 90, 110);
-  circle(x, y, 34 + pulse);
-
-  fill(255, 230, 120, 160);
-  circle(x, y, 22);
-
-  // 寶石本體
-  push();
-  translate(x, y);
-  rotate(frameCount * 0.01);
+  circle(x, y, 30 + pulse);
   fill(255, 220, 110);
-  stroke(255, 245, 180);
-  strokeWeight(2);
-  beginShape();
-  for (let i = 0; i < 6; i++) {
-    let a = (TWO_PI / 6) * i;
-    let r = 11;
-    vertex(cos(a) * r, sin(a) * r);
-  }
-  endShape(CLOSE);
-  pop();
-
-  // 寶石高光
-  noStroke();
-  fill(255, 255, 220);
-  circle(x - 4, y - 4, 4);
+  circle(x, y, 20);
+  fill(255, 245, 180);
+  circle(x - 5, y - 5, 6);
 }
 
 function drawPlayer() {
-  let x = player.x * w + w / 2;
-  let y = player.y * w + w / 2;
-  let bob = sin(frameCount * 0.15) * 1.5;
-
-  // 腳下光圈
-  noStroke();
-  fill(0, 255, 180, 90);
-  circle(x, y + 14, 22);
-
-  // 人物陰影
-  fill(0, 0, 0, 70);
-  ellipse(x, y + 16, 20, 6);
-
+  let cx = player.x * w + w / 2;
+  let cy = player.y * w + w / 2;
   push();
-  translate(x, y + bob);
+  translate(cx, cy);
 
-  // 身體斗篷
-  fill(60, 180, 255);
-  noStroke();
-  beginShape();
-  ellipse(0, 4, 10, 12);
-  endShape(CLOSE);
-
-  // 斗篷邊緣
-  stroke(30, 110, 180);
-  strokeWeight(2);
-  beginShape();
-  ellipse(0, 4, 10, 12);
-  endShape(CLOSE);
-
-  // 頭部
-  noStroke();
-  fill(255, 210, 160);
-  circle(0, -8, 11);
-
+  // 身體
+  fill(20, 180, 220);
+  ellipse(0, 6, 24, 28);
+  // 頭
+  fill(255, 224, 196);
+  circle(0, -8, 20);
   // 頭髮
-  fill(90, 60, 40);
-  beginShape();
-  arc(0, -10, 12, 8, PI, TWO_PI);
-  endShape(CLOSE);
-
-  // 眼睛
+  fill(60, 40, 30);
+  arc(0, -12, 18, 12, PI, TWO_PI);
+  // 眼
   fill(20);
-  ellipse(-3, -8, 1.8, 2.4);
-  ellipse(3, -8, 1.8, 2.4);
-
-  // 帽子
-  fill(220, 50, 80);
-  stroke(160, 30, 50);
-  strokeWeight(1.5);
-  beginShape();
-  moveTo(-7, -12);
-  lineTo(7, -12);
-  lineTo(5, -18);
-  lineTo(-5, -18);
-  endShape(CLOSE);
-
+  if (player.dir === 1) circle(4, -9, 3);
+  else if (player.dir === -1) circle(-4, -9, 3);
+  else {
+    circle(-4, -9, 3);
+    circle(4, -9, 3);
+  }
   pop();
 }
 
 function drawUI() {
-  // UI 面板
-  fill(10, 16, 32, 200);
-  noStroke();
-  rect(12, 12, 160, 42, 12);
-  stroke(80, 140, 220, 160);
-  strokeWeight(1);
-  rect(12, 12, 160, 42, 12);
-
   fill(255);
-  noStroke();
-  textSize(14);
+  textSize(16);
   textAlign(LEFT, TOP);
-  text("迷宮冒險", 24, 20);
-  textSize(12);
-  fill(180, 210, 255);
-  text("時間：" + elapsedTime + "s", 24, 38);
-}
-
-function drawWinScreen() {
-  fill(0, 0, 0, 190);
-  rect(0, 0, width, height);
-
-  // 勝利卡片
-  noStroke();
-  fill(255, 220, 110);
-  rectMode(CENTER);
-  rect(width / 2, height / 2, 360, 200, 22);
-  rectMode(CORNER);
-
-  fill(255, 245, 180);
-  rect(width / 2 - 165, height / 2 - 90, 330, 6, 4);
-
-  fill(255);
-  textAlign(CENTER, CENTER);
-  textSize(30);
-  text("寶石取得！", width / 2, height / 2 - 30);
-
-  textSize(14);
-  fill(200);
-  text("完成時間：" + elapsedTime + " 秒", width / 2, height / 2 + 12);
-  text("按 R 重新開始", width / 2, height / 2 + 44);
+  text("⏱ 時間：" + elapsedTime + " s", 16, 16);
 }
 
 function keyPressed() {
   initAudio();
 
+  if (gameState === "start") {
+    if (keyCode === ENTER) {
+      startGame();
+    }
+    return;
+  }
+
   if (gameState === "win") {
-    if (key === "r" || key === "R") {
+    if (keyCode === ENTER || key === "r" || key === "R") {
       resetGame();
     }
     return;
   }
 
-  let beforeX = player.x;
-  let beforeY = player.y;
+  if (key === "r" || key === "R") {
+    resetGame();
+    return;
+  }
 
-  if (keyCode === UP_ARROW) movePlayer(0, -1);
-  else if (keyCode === DOWN_ARROW) movePlayer(0, 1);
-  else if (keyCode === LEFT_ARROW) movePlayer(-1, 0);
-  else if (keyCode === RIGHT_ARROW) movePlayer(1, 0);
-
-  if (player.x === beforeX && player.y === beforeY) {
-    playHitSound();
+  if (keyCode === UP_ARROW) {
+    player.dir = 0;
+    movePlayer(0, -1);
+  } else if (keyCode === DOWN_ARROW) {
+    player.dir = 0;
+    movePlayer(0, 1);
+  } else if (keyCode === LEFT_ARROW) {
+    player.dir = -1;
+    movePlayer(-1, 0);
+  } else if (keyCode === RIGHT_ARROW) {
+    player.dir = 1;
+    movePlayer(1, 0);
   }
 }
 
 function movePlayer(dx, dy) {
-  let newX = player.x + dx;
-  let newY = player.y + dy;
-
-  if (newX >= 0 && newX < cols && newY >= 0 && newY < rows) {
-    if (maze[newY][newX] === 0) {
-      player.x = newX;
-      player.y = newY;
+  let nx = player.x + dx;
+  let ny = player.y + dy;
+  if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+    if (maze[ny][nx] === 0) {
+      player.x = nx;
+      player.y = ny;
       checkWin();
+    } else {
+      playHitSound();
     }
+  } else {
+    playHitSound();
   }
 }
 
@@ -389,16 +338,19 @@ function checkWin() {
   if (player.x === goal.x && player.y === goal.y) {
     gameState = "win";
     playWinSound();
-    loop();
   }
 }
 
-function resetGame() {
-  player = { x: 1, y: 1 };
+function startGame() {
+  player = { x: 1, y: 1, dir: 0 };
   gameState = "playing";
-  initMaze();
   startTime = millis();
-  playBGM();
-  loop();
+  initMaze();
 }
 
+function resetGame() {
+  player = { x: 1, y: 1, dir: 0 };
+  gameState = "playing";
+  startTime = millis();
+  initMaze();
+}
