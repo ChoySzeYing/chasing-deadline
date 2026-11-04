@@ -1,17 +1,23 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Moonlit Ruins</title>
-  <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
-</head>
-<body>
-  <div class="game-shell">
-    <h1>Moonlit Ruins</h1>
-    <div id="game"></div>
-  </div>
-  <script src="sketch.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moonlit Ruins</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
+  </head>
+  <body>
+    <div class="game-shell">
+      <h1>Moonlit Ruins</h1>
+      <div id="game"></div>
+    </div>
+
+    <audio id="bgm" preload="auto" loop crossorigin="anonymous">
+      <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" type="audio/mpeg" />
+      您的瀏覽器不支援 HTML5 Audio。
+    </audio>
+
+    <script src="sketch.js"></script>
+  </body>
 </html>
