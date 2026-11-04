@@ -1,17 +1,18 @@
 :root {
-  --bg-deep: #111820;
-  --bg-mid: #1d2a34;
-  --panel: #1f2d39;
-  --panel-border: #7ed6b7;
-  --wall: #5f6f7b;
-  --floor: #243443;
-  --floor-alt: #2d3f50;
-  --gold: #f7d37d;
-  --gold-deep: #d7a941;
-  --hero: #f6c376;
-  --hero-dark: #bc7d3f;
+  --page-bg-1: #0f1720;
+  --page-bg-2: #1b2d39;
+  --panel: rgba(18, 26, 35, 0.85);
+  --border: #8fe1bc;
   --text: #edf4f8;
-  --soft: #9fb7c7;
+  --soft: #acbfce;
+  --gold: #f6d27a;
+  --wall: #5f6f7b;
+  --floor: #2a3e4d;
+  --floor-alt: #365367;
+  --hero: #f7c98a;
+  --hero-dark: #b87a42;
+  --npc: #98d4f4;
+  --goal: #f7d666;
 }
 
 * {
@@ -22,7 +23,7 @@ html, body {
   margin: 0;
   width: 100%;
   min-height: 100%;
-  background: linear-gradient(180deg, var(--bg-deep), var(--bg-mid));
+  background: linear-gradient(180deg, var(--page-bg-1), var(--page-bg-2));
   color: var(--text);
   font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
 }
@@ -34,36 +35,39 @@ body {
   padding: 24px;
 }
 
-.container {
+.game-shell {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  padding: 18px 20px 16px;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 3px solid var(--border);
+  box-shadow: 0 0 0 4px rgba(143, 225, 188, 0.2), 0 20px 40px rgba(0, 0, 0, 0.4);
 }
 
 h1 {
   margin: 0;
-  font-size: 1.7rem;
-  letter-spacing: 0.1em;
+  font-size: clamp(1.5rem, 2vw, 2rem);
+  letter-spacing: 0.12em;
   color: var(--gold);
-  text-shadow: 0 0 10px rgba(247, 211, 125, 0.35);
+  text-shadow: 0 0 12px rgba(246, 210, 122, 0.35);
 }
 
 #game {
   display: inline-block;
-  border-radius: 12px;
-  padding: 8px;
-  background: rgba(17, 24, 32, 0.9);
-  border: 3px solid var(--panel-border);
-  box-shadow:
-    0 0 0 3px rgba(126, 214, 183, 0.18),
-    0 18px 40px rgba(0, 0, 0, 0.45);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111a23;
+  border: 2px solid rgba(255, 255, 255, 0.08);
 }
 
 canvas {
   display: block;
-  border-radius: 8px;
-  background: #101a23;
+  width: min(86vw, 560px);
+  height: auto;
+  background: #101820;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
