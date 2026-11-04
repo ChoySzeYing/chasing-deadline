@@ -34,6 +34,33 @@ let messageTimer = 0;
 let startTime = 0;
 let timeLeft = TOTAL_TIME;
 
+// 單一模組：對話系統
+let dialogueState = null;
+let flags = {
+  introSeen: false,
+  doorUnlocked: false,
+  trapWarned: false
+};
+
+const dialogueScripts = {
+  intro: [
+    { speaker: "阿玲", name: "阿玲", avatar: "mage", text: "你終於醒了……這裡不是正常的房間。" },
+    { speaker: "阿玲", name: "阿玲", avatar: "mage", text: "房門外的走廊沒有聲音，只有潮氣和腳步聲。" },
+    { speaker: "阿玲", name: "阿玲", avatar: "mage", text: "如果你要離開，先找到那顆發亮的石心。" }
+  ],
+  doorLocked: [
+    { speaker: "門", name: "木門", avatar: "door", text: "門栓住了，裡面傳來輕微的碰撞聲。" },
+    { speaker: "門", name: "木門", avatar: "door", text: "看起來需要某樣東西來解鎖。" }
+  ],
+  doorUnlocked: [
+    { speaker: "門", name: "木門", avatar: "door", text: "鎖頭轉動了一下，門開了一條縫。" }
+  ],
+  trap: [
+    { speaker: "警示", name: "石碑", avatar: "stone", text: "『不該踩進陰影。』" },
+    { speaker: "警示", name: "石碑", avatar: "stone", text: "字跡模糊，但你仍然能感覺到氣味變冷了。" }
+  ]
+};
+
 const npcDialogues = [
   "冒險者，寶石就在迷宮深處，時間不多了。",
   "遠處的石柱會擋住你的路，先避開它們。",
@@ -95,38 +122,45 @@ function updateGameState() {
 }
 
 function drawBackground() {
-  fill(12, 18, 26);
-  rect(0, 0, width, height);
-
+  // 背景底色與天空層次
+  noStroke();
   for (let y = 0; y < height; y++) {
     const ratio = y / height;
-    const base = lerpColor(color(11, 18, 30), color(34, 52, 66), ratio);
-    stroke(base);
-    line(0, y, width, y);
+    const c = lerpColor(color(10, 16, 27), color(30, 46, 62), ratio);
+    fill(c);
+    rect(0, y, width, 1);
   }
 
-  // 月亮
-  noStroke();
+  // 月亮光暈
+  fill(247, 231, 172, 30);
+  circle(width * 0.84, height * 0.18, 90);
   fill(247, 236, 186, 220);
-  circle(width * 0.84, height * 0.18, 54);
+  circle(width * 0.84, height * 0.18, 52);
 
   // 星星
-  fill(255, 246, 206, 220);
-  for (let i = 0; i < 18; i++) {
-    const x = (i * 79) % width;
-    const y = ((i * 37) % (height * 0.55)) + 12;
-    rect(x, y, 2, 2);
+  fill(255, 248, 212, 220);
+  for (let i = 0; i < 24; i++) {
+    const x = ((i * 83) % width) + 12;
+    const y = ((i * 53) % (height * 0.58)) + 10;
+    const size = i % 3 === 0 ? 3 : 2;
+    rect(x, y, size, size);
   }
 
-  // 山脈
-  fill(19, 30, 41, 200);
-  triangle(0, height * 0.72, width * 0.17, height * 0.52, width * 0.38, height * 0.72);
-  triangle(width * 0.24, height * 0.74, width * 0.52, height * 0.46, width * 0.8, height * 0.74);
-  triangle(width * 0.68, height * 0.72, width * 0.88, height * 0.55, width, height * 0.72);
+  // 遠景山脈（多層）
+  fill(18, 30, 42, 170);
+  triangle(0, height * 0.73, width * 0.18, height * 0.52, width * 0.38, height * 0.73);
+  triangle(width * 0.24, height * 0.75, width * 0.55, height * 0.45, width * 0.8, height * 0.75);
+  triangle(width * 0.65, height * 0.72, width * 0.90, height * 0.54, width, height * 0.72);
 
-  // 地面霧氣
-  fill(20, 34, 46, 160);
+  fill(25, 38, 50, 180);
+  triangle(0, height * 0.78, width * 0.22, height * 0.62, width * 0.44, height * 0.78);
+  triangle(width * 0.30, height * 0.80, width * 0.60, height * 0.58, width * 0.86, height * 0.80);
+
+  // 地面與光影
+  fill(19, 29, 39, 160);
   rect(0, height * 0.72, width, height * 0.28);
+  fill(255, 255, 255, 14);
+  rect(0, height * 0.72, width, 8);
 }
 
 function drawGameScene() {
@@ -137,7 +171,9 @@ function drawGameScene() {
   drawPlayer();
   drawHud();
 
-  if (showMessage) {
+  if (dialogueState && dialogueState.active) {
+    drawDialoguePanel();
+  } else if (showMessage) {
     drawDialogueBox();
   }
 }
@@ -212,6 +248,8 @@ function startGame() {
   state = "playing";
   startTime = millis();
   timeLeft = TOTAL_TIME;
+  openDialogue("intro");
+  flags.introSeen = true;
 }
 
 function findStartPosition() {
@@ -229,6 +267,17 @@ function findStartPosition() {
 }
 
 function keyPressed() {
+  if (dialogueState && dialogueState.active) {
+    if (key === " " || key === "z" || key === "Z" || keyCode === ENTER) {
+      if (dialogueState.displayed < dialogueState.currentText.length) {
+        dialogueState.displayed = dialogueState.currentText.length;
+      } else {
+        advanceDialogue();
+      }
+    }
+    return;
+  }
+
   if (state === "title") {
     if (key === "Enter") {
       startGame();
@@ -244,7 +293,7 @@ function keyPressed() {
     return;
   }
 
-  if (key === " " || key === "Spacebar") {
+  if (key === " " || key === "Spacebar" || key === "z" || key === "Z") {
     talkToNpc();
     return;
   }
@@ -351,53 +400,88 @@ function drawNpc() {
   const px = npc.x * TILE + TILE / 2;
   const py = npc.y * TILE + TILE / 2;
 
-  fill(0, 0, 0, 40);
+  // 影子
+  fill(0, 0, 0, 35);
   ellipse(px, py + 18, 22, 10);
 
-  fill(117, 192, 230);
-  rect(px - 11, py - 2, 22, 18);
+  // 斗篷與衣服
+  fill(107, 153, 190);
+  rect(px - 11, py - 1, 22, 16);
+  fill(77, 110, 134);
+  triangle(px - 11, py + 9, px, py - 12, px + 11, py + 9);
 
+  // 頭部
   fill(236, 196, 138);
-  ellipse(px, py - 12, 16, 16);
+  ellipse(px, py - 13, 15, 15);
 
-  fill(38, 56, 68);
+  // 髮型
+  fill(65, 82, 95);
+  rect(px - 8, py - 19, 16, 6);
+
+  // 眼睛
+  fill(28, 44, 58);
   rect(px - 3, py - 13, 2, 2);
   rect(px + 1, py - 13, 2, 2);
 
-  fill(74, 94, 103);
+  // 胡子
+  fill(78, 92, 103);
   rect(px - 5, py - 8, 10, 4);
+
+  // 手臂
+  fill(236, 196, 138);
+  rect(px - 14, py + 1, 4, 11);
+  rect(px + 10, py + 1, 4, 11);
+
+  // 腿
+  fill(50, 72, 92);
+  rect(px - 6, py + 14, 5, 9);
+  rect(px + 1, py + 14, 5, 9);
 }
 
 function drawPlayer() {
   const px = player.x * TILE + TILE / 2;
   const py = player.y * TILE + TILE / 2;
 
-  fill(0, 0, 0, 40);
-  ellipse(px, py + 18, 20, 8);
+  // 地面陰影
+  fill(0, 0, 0, 35);
+  ellipse(px, py + 19, 20, 8);
 
-  fill(128, 85, 58);
-  triangle(px - 10, py + 2, px, py - 14, px + 10, py + 2);
+  // 斗篷
+  fill(146, 92, 58);
+  triangle(px - 12, py + 2, px, py - 14, px + 12, py + 2);
 
-  fill(242, 197, 143);
+  // 頭部與髮型
+  fill(240, 205, 150);
   ellipse(px, py - 12, 14, 15);
+  fill(83, 59, 42);
+  rect(px - 8, py - 17, 16, 6);
 
-  fill(67, 42, 31);
-  rect(px - 8, py - 17, 16, 5);
+  // 衣服主體
+  fill(170, 110, 77);
+  rect(px - 9, py - 2, 18, 13);
 
-  fill(144, 97, 76);
-  rect(px - 8, py - 2, 16, 12);
+  // 肩膀與手臂
+  fill(240, 205, 150);
+  rect(px - 13, py - 1, 4, 12);
+  rect(px + 9, py - 1, 4, 12);
 
-  fill(242, 197, 143);
-  rect(px - 12, py - 1, 4, 12);
-  rect(px + 8, py - 1, 4, 12);
+  // 腿
+  fill(62, 83, 116);
+  rect(px - 6, py + 11, 5, 11);
+  rect(px + 1, py + 11, 5, 11);
 
-  fill(54, 74, 98);
-  rect(px - 6, py + 10, 5, 10);
-  rect(px + 1, py + 10, 5, 10);
+  // 鞋子
+  fill(38, 49, 65);
+  rect(px - 7, py + 21, 6, 3);
+  rect(px + 1, py + 21, 6, 3);
 
-  fill(62, 46, 36);
+  // 面部細節
+  fill(52, 38, 28);
   rect(px - 3, py - 13, 2, 2);
   rect(px + 1, py - 13, 2, 2);
+
+  fill(179, 135, 103);
+  rect(px - 4, py - 7, 8, 3);
 }
 
 function drawHud() {
@@ -439,6 +523,123 @@ function drawDialogueBox() {
   fill(237, 244, 248);
   textSize(14);
   text(messageText, boxX + boxW / 2, boxY + boxH / 2 + 2);
+}
+
+function openDialogue(scriptId) {
+  const script = dialogueScripts[scriptId];
+  if (!script) return;
+
+  dialogueState = {
+    active: true,
+    scriptId,
+    index: 0,
+    displayed: 0,
+    currentText: script[0].text,
+    currentLine: script[0]
+  };
+
+  updateDialogueText();
+}
+
+function updateDialogueText() {
+  if (!dialogueState || !dialogueState.active) return;
+
+  const current = getCurrentDialogueLine();
+  if (!current) return;
+
+  dialogueState.currentLine = current;
+  dialogueState.currentText = current.text;
+  dialogueState.displayed = Math.min(dialogueState.displayed, dialogueState.currentText.length);
+}
+
+function getCurrentDialogueLine() {
+  if (!dialogueState || !dialogueState.scriptId) return null;
+  const script = dialogueScripts[dialogueState.scriptId];
+  if (!script || dialogueState.index >= script.length) return null;
+  return script[dialogueState.index];
+}
+
+function advanceDialogue() {
+  if (!dialogueState || !dialogueState.active) return;
+
+  const script = dialogueScripts[dialogueState.scriptId];
+  if (!script) {
+    dialogueState = null;
+    return;
+  }
+
+  dialogueState.index += 1;
+
+  if (dialogueState.index >= script.length) {
+    dialogueState = null;
+    return;
+  }
+
+  dialogueState.displayed = 0;
+  updateDialogueText();
+}
+
+function drawDialoguePanel() {
+  if (!dialogueState || !dialogueState.currentLine) return;
+
+  const panelX = 32;
+  const panelY = height - 118;
+  const panelW = width - 64;
+  const panelH = 92;
+
+  fill(16, 22, 30, 220);
+  rect(panelX, panelY, panelW, panelH, 10);
+
+  // 頭像框
+  const avatarBox = { x: panelX + 16, y: panelY + 16, w: 42, h: 42 };
+  fill(30, 42, 52);
+  rect(avatarBox.x, avatarBox.y, avatarBox.w, avatarBox.h, 8);
+
+  drawAvatarPortrait(dialogueState.currentLine.avatar, avatarBox.x + 21, avatarBox.y + 21);
+
+  // 名字標籤
+  fill(245, 211, 116);
+  textSize(14);
+  text(dialogueState.currentLine.name, panelX + 72, panelY + 28);
+
+  // 文字內容
+  fill(237, 244, 248);
+  textSize(15);
+  const visibleText = dialogueState.currentText.slice(0, dialogueState.displayed);
+  text(visibleText, panelX + 72, panelY + 54, panelW - 92, 42);
+
+  // 繼續提示
+  if (dialogueState.displayed >= dialogueState.currentText.length) {
+    fill(170, 220, 180);
+    textSize(12);
+    text("按 空白 / Z 繼續", panelX + panelW - 110, panelY + panelH - 16);
+  }
+
+  // 逐字輸出動畫
+  if (dialogueState.displayed < dialogueState.currentText.length) {
+    dialogueState.displayed += 1;
+  }
+}
+
+function drawAvatarPortrait(type, cx, cy) {
+  if (type === "mage") {
+    fill(126, 164, 192);
+    rect(cx - 12, cy - 8, 24, 22);
+    fill(236, 196, 138);
+    ellipse(cx, cy - 12, 12, 12);
+    fill(70, 90, 110);
+    rect(cx - 5, cy - 8, 10, 4);
+  } else if (type === "door") {
+    fill(122, 85, 58);
+    rect(cx - 12, cy - 10, 24, 20);
+    fill(79, 60, 46);
+    rect(cx - 3, cy - 2, 6, 14);
+  } else if (type === "stone") {
+    fill(130, 136, 143);
+    rect(cx - 12, cy - 10, 24, 20);
+    fill(202, 214, 220);
+    rect(cx - 4, cy - 4, 8, 8);
+  }
 }
 
 function setupBgm() {
