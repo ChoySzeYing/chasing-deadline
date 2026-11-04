@@ -11,11 +11,16 @@ let startTime = 0;
 let elapsedTime = 0;
 let hitCooldown = 0;
 
+let bgmTimer = 0;
+let bgmNotes = [146.83, 130.81, 116.54, 130.81];
+let bgmIndex = 0;
+
+let audioStarted = false;
 let bgOsc, bgEnv;
 let hitOsc, hitEnv;
 let winOsc, winEnv;
+let loseOsc, loseEnv;
 let ghostOsc, ghostEnv;
-let audioStarted = false;
 
 function setup() {
   createCanvas(cols * w, rows * w);
@@ -38,6 +43,7 @@ function draw() {
 
     updateGhosts();
     checkGhostCollision();
+    updateBGM();
   }
 
   drawMaze();
@@ -63,7 +69,6 @@ function initAudio() {
   bgEnv = new p5.Envelope(0.02, 0.18, 0.25, 1.2);
   bgOsc.amp(bgEnv);
   bgOsc.start();
-  playBGM();
 
   hitOsc = new p5.Oscillator("square");
   hitEnv = new p5.Envelope(0.005, 0.1, 0, 0.12);
@@ -75,34 +80,35 @@ function initAudio() {
   winOsc.amp(winEnv);
   winOsc.start();
 
-  ghostOsc = new p5.Oscillator("sawtooth");
-  ghostEnv = new p5.Envelope(0.01, 0.08, 0, 0.1);
+  loseOsc = new p5.Oscillator("sawtooth");
+  loseEnv = new p5.Envelope(0.01, 0.25, 0, 0.4);
+  loseOsc.amp(loseEnv);
+  loseOsc.start();
+
+  ghostOsc = new p5.Oscillator("triangle");
+  ghostEnv = new p5.Envelope(0.01, 0.06, 0, 0.08);
   ghostOsc.amp(ghostEnv);
   ghostOsc.start();
 }
 
-function playBGM() {
-  if (!bgOsc || gameState !== "playing") return;
-  let notes = [146.83, 130.81, 116.54, 130.81];
-  let i = 0;
-  function next() {
-    if (gameState !== "playing") return;
-    bgOsc.freq(notes[i]);
+function updateBGM() {
+  bgmTimer++;
+  if (bgmTimer >= 76) {
+    bgmTimer = 0;
+    bgOsc.freq(bgmNotes[bgmIndex]);
     bgEnv.play();
-    i = (i + 1) % notes.length;
-    setTimeout(next, 760);
+    bgmIndex = (bgmIndex + 1) % bgmNotes.length;
   }
-  next();
 }
 
 function playHitSound() {
-  if (!hitOsc) return;
+  if (!audioStarted) return;
   hitOsc.freq(90);
   hitEnv.play();
 }
 
 function playWinSound() {
-  if (!winOsc) return;
+  if (!audioStarted) return;
   winOsc.freq(523.25);
   setTimeout(() => winOsc.freq(659.25), 160);
   setTimeout(() => winOsc.freq(783.99), 340);
@@ -111,25 +117,31 @@ function playWinSound() {
 }
 
 function playLoseSound() {
-  if (!ghostOsc) return;
-  ghostOsc.freq(180);
-  setTimeout(() => ghostOsc.freq(140), 220);
-  setTimeout(() => ghostOsc.freq(110), 440);
+  if (!audioStarted) return;
+  loseOsc.freq(220);
+  setTimeout(() => loseOsc.freq(180), 220);
+  setTimeout(() => loseOsc.freq(140), 440);
+  loseEnv.play();
+}
+
+function playGhostSound() {
+  if (!audioStarted) return;
+  ghostOsc.freq(260 + random(-40, 40));
   ghostEnv.play();
 }
 
 function drawBackground() {
-  background(12, 16, 28);
+  background(20, 24, 42);
 
   noStroke();
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 80; i++) {
     let sx = (i * 97 + frameCount * 0.01) % width;
     let sy = (i * 53) % height;
-    fill(120, 140, 180, 30);
-    circle(sx, sy, 1);
+    fill(140, 160, 210, 40);
+    circle(sx, sy, 1.2);
   }
 
-  fill(18, 24, 42, 180);
+  fill(30, 34, 60, 200);
   beginShape();
   for (let x = 0; x <= width; x += 28) {
     let y = height - 120 - sin(x * 0.008) * 30 - noise(x * 0.01) * 24;
@@ -139,8 +151,18 @@ function drawBackground() {
   vertex(0, height);
   endShape(CLOSE);
 
+  fill(24, 28, 52, 220);
+  beginShape();
+  for (let x = 0; x <= width; x += 22) {
+    let y = height - 70 - sin(x * 0.012 + 1) * 22 - noise(x * 0.012) * 18;
+    vertex(x, y);
+  }
+  vertex(width, height);
+  vertex(0, height);
+  endShape(CLOSE);
+
   noFill();
-  stroke(120, 90, 180, 140);
+  stroke(140, 110, 220, 150);
   strokeWeight(4);
   rect(8, 8, width - 16, height - 16, 18);
   noStroke();
@@ -151,22 +173,22 @@ function drawStartScreen() {
   rect(0, 0, width, height);
   textAlign(CENTER, CENTER);
 
-  fill(180, 140, 255);
-  textSize(46);
+  fill(200, 170, 255);
+  textSize(48);
   text("迷宮驚魂", width / 2, height / 2 - 90);
 
-  fill(200);
+  fill(210);
   textSize(18);
   text("方向鍵移動，躲避鬼魂，取得寶石", width / 2, height / 2 - 30);
 
-  fill(110, 255, 220);
+  fill(120, 255, 210);
   textSize(22);
   let blink = sin(frameCount * 0.08) > 0;
   if (blink) {
     text("按 Enter 開始遊戲", width / 2, height / 2 + 20);
   }
 
-  fill(150);
+  fill(160);
   textSize(15);
   text("按 R 重新開始", width / 2, height / 2 + 70);
 }
@@ -181,15 +203,15 @@ function drawWinScreen() {
   rect(width / 2, height / 2, 360, 200, 22);
   rectMode(CORNER);
 
-  fill(30, 30, 50);
+  fill(40, 30, 10);
   textSize(34);
   text("成功逃離！", width / 2, height / 2 - 40);
 
-  fill(60, 60, 90);
+  fill(90, 70, 30);
   textSize(18);
   text("完成時間：" + elapsedTime + " 秒", width / 2, height / 2);
 
-  fill(80, 80, 110);
+  fill(120, 90, 40);
   textSize(18);
   let blink = sin(frameCount * 0.08) > 0;
   if (blink) {
@@ -198,15 +220,15 @@ function drawWinScreen() {
 }
 
 function drawLoseScreen() {
-  fill(40, 0, 10, 200);
+  fill(60, 0, 10, 200);
   rect(0, 0, width, height);
   textAlign(CENTER, CENTER);
 
-  fill(255, 90, 110);
+  fill(255, 110, 130);
   textSize(40);
   text("被鬼魂抓到！", width / 2, height / 2 - 40);
 
-  fill(200);
+  fill(230);
   textSize(18);
   text("堅持時間：" + elapsedTime + " 秒", width / 2, height / 2 + 10);
 
@@ -266,13 +288,13 @@ function initGhosts() {
     do {
       gx = floor(random(2, cols - 2));
       gy = floor(random(2, rows - 2));
-    } while (maze[gy][gx] === 1 || (gx < 5 && gy < 5));
+    } while (maze[gy][gx] === 1 || (gx < 6 && gy < 6));
 
     ghosts.push({
       x: gx,
       y: gy,
       moveTimer: 0,
-      moveInterval: 30 + i * 12
+      moveInterval: 40 + i * 14
     });
   }
 }
@@ -307,6 +329,7 @@ function moveGhost(g) {
     if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && maze[ny][nx] === 0) {
       g.x = nx;
       g.y = ny;
+      playGhostSound();
       return;
     }
   }
@@ -371,7 +394,7 @@ function drawGhosts() {
   for (let g of ghosts) {
     let x = g.x * w + w / 2;
     let y = g.y * w + w / 2;
-    let wobble = sin(frameCount * 0.1 + g.x) * 2;
+    let wobble = sin(frameCount * 0.12 + g.x) * 3;
 
     noStroke();
     fill(180, 100, 255, 180);
@@ -531,7 +554,8 @@ function startGame() {
   startTime = millis();
   initMaze();
   initGhosts();
-  playBGM();
+  bgmIndex = 0;
+  bgmTimer = 0;
 }
 
 function resetGame() {
@@ -540,5 +564,6 @@ function resetGame() {
   startTime = millis();
   initMaze();
   initGhosts();
-  playBGM();
+  bgmIndex = 0;
+  bgmTimer = 0;
 }
