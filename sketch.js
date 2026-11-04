@@ -13,12 +13,14 @@ let dialog = {
   active: false,
   speaker: "",
   fullText: "",
+  displayText: "",
   lines: [],
   timer: 0,
   charGap: 5,
   done: false,
   boxW: 540,
-  boxH: 150
+  boxH: 150,
+  padding: 28
 };
 
 let npcs = [];
@@ -27,7 +29,7 @@ function setup() {
   createCanvas(960, 720);
   frameRate(24);
   imageMode(CENTER);
-  textFont("Microsoft JhengHei, SimHei, sans-serif");
+  textFont("Microsoft JhengHei, SimHei, Noto Sans TC, sans-serif");
 
   map = [
     [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
@@ -63,7 +65,13 @@ function setup() {
 
   timeLeft = 80;
   setInterval(() => {
-    if (gameState === "game" && !dialog.active) timeLeft--;
+    if (gameState === "game" && !dialog.active) {
+      timeLeft--;
+      if (timeLeft <= 0) {
+        timeLeft = 0;
+        gameState = "lose";
+      }
+    }
   }, 1000);
 
   generateBackground();
@@ -75,7 +83,19 @@ function setup() {
 
 function draw() {
   background(12);
-  if (gameState !== "game") return;
+
+  if (gameState === "lose") {
+    push();
+    textAlign(CENTER, CENTER);
+    fill(220, 80, 80);
+    textSize(32);
+    text("時間耗盡，你被困在迷宮之中……", width / 2, height / 2);
+    fill(160);
+    textSize(18);
+    text("重新整理頁面可以再試一次", width / 2, height / 2 + 48);
+    pop();
+    return;
+  }
 
   image(bgImage, width / 2, height / 2);
   drawPlayerOnMap();
@@ -96,69 +116,54 @@ function generateBackground() {
     for (let x = 0; x < map[y].length; x++) {
       const px = x * TILE + TILE / 2;
       const py = y * TILE + TILE / 2;
-
-      if (map[y][x] === 1) {
-        drawWallTile(bgImage, px, py);
-      } else {
-        drawFloorTile(bgImage, px, py);
-      }
+      if (map[y][x] === 1) drawWallTile(bgImage, px, py);
+      else drawFloorTile(bgImage, px, py);
     }
   }
-
   drawBackgroundDetails(bgImage);
 }
 
 function drawWallTile(g, px, py) {
   g.push();
   g.translate(px, py);
-
   g.fill(34, 36, 42);
   g.noStroke();
   g.rect(-TILE / 2, -TILE / 2, TILE, TILE);
-
   g.stroke(22, 24, 28);
   g.strokeWeight(2);
   g.rect(-TILE / 2 + 4, -TILE / 2 + 4, TILE - 8, TILE - 8);
-
   g.stroke(28, 30, 36);
   g.strokeWeight(1);
   g.line(0, -TILE / 2 + 4, 0, TILE / 2 - 4);
   g.line(-TILE / 2 + 4, 0, TILE / 2 - 4, 0);
-
   g.noStroke();
   g.fill(60, 64, 74, 180);
   g.rect(-TILE / 2 + 8, -TILE / 2 + 8, 8, 4);
   g.fill(20, 22, 26, 200);
   g.rect(-TILE / 2 + 22, TILE / 2 - 12, 6, 4);
-
   g.pop();
 }
 
 function drawFloorTile(g, px, py) {
   g.push();
   g.translate(px, py);
-
   g.fill(46, 48, 54);
   g.noStroke();
   g.rect(-TILE / 2, -TILE / 2, TILE, TILE);
-
   g.stroke(34, 36, 42);
   g.strokeWeight(1);
   g.line(-TILE / 2, -TILE / 2, TILE / 2, -TILE / 2);
   g.line(-TILE / 2, -TILE / 2, -TILE / 2, TILE / 2);
-
   g.noStroke();
   g.fill(38, 40, 46, 160);
   g.ellipse(-8, -6, 6, 3);
   g.ellipse(10, 8, 8, 3);
-
   g.pop();
 }
 
 function drawBackgroundDetails(g) {
   g.push();
   g.noStroke();
-
   for (let i = 0; i < 180; i++) {
     const rx = random(width);
     const ry = random(height);
@@ -167,7 +172,6 @@ function drawBackgroundDetails(g) {
     g.fill(120, 130, 150, rb);
     g.circle(rx, ry, ra);
   }
-
   g.pop();
 }
 
@@ -175,14 +179,11 @@ function generatePlayerSprite() {
   playerSprite = createGraphics(64, 96);
   playerSprite.clear();
   playerSprite.imageMode(CENTER);
-
   playerSprite.push();
   playerSprite.translate(32, 48);
-
   playerSprite.noStroke();
   playerSprite.fill(0, 0, 0, 90);
   playerSprite.ellipse(0, 34, 26, 8);
-
   playerSprite.fill(210, 45, 72);
   playerSprite.stroke(140, 25, 48);
   playerSprite.strokeWeight(1.5);
@@ -192,21 +193,16 @@ function generatePlayerSprite() {
   playerSprite.vertex(8, -34);
   playerSprite.vertex(-8, -34);
   playerSprite.endShape(CLOSE);
-
   playerSprite.fill(72, 156, 224);
   playerSprite.noStroke();
   playerSprite.ellipse(0, 4, 14, 18);
-
   playerSprite.fill(255, 214, 166);
   playerSprite.circle(0, -16, 16);
-
   playerSprite.fill(82, 54, 38);
   playerSprite.arc(0, -18, 18, 12, PI, TWO_PI);
-
   playerSprite.fill(16);
   playerSprite.ellipse(-4, -16, 2, 3);
   playerSprite.ellipse(4, -16, 2, 3);
-
   playerSprite.pop();
 }
 
@@ -214,30 +210,23 @@ function generateNpcSprite() {
   npcSprite = createGraphics(64, 96);
   npcSprite.clear();
   npcSprite.imageMode(CENTER);
-
   npcSprite.push();
   npcSprite.translate(32, 48);
-
   npcSprite.noStroke();
   npcSprite.fill(0, 0, 0, 90);
   npcSprite.ellipse(0, 34, 26, 8);
-
   npcSprite.fill(114, 162, 210);
   npcSprite.stroke(70, 110, 160);
   npcSprite.strokeWeight(1.5);
   npcSprite.ellipse(0, 4, 14, 18);
-
   npcSprite.fill(255, 222, 184);
   npcSprite.noStroke();
   npcSprite.circle(0, -16, 16);
-
   npcSprite.fill(54, 36, 28);
   npcSprite.arc(0, -18, 18, 12, PI, TWO_PI);
-
   npcSprite.fill(16);
   npcSprite.ellipse(-4, -16, 2, 3);
   npcSprite.ellipse(4, -16, 2, 3);
-
   npcSprite.pop();
 }
 
@@ -245,20 +234,15 @@ function generatePortalSprite() {
   portalSprite = createGraphics(64, 64);
   portalSprite.clear();
   portalSprite.imageMode(CENTER);
-
   portalSprite.push();
   portalSprite.translate(32, 32);
-
   portalSprite.noStroke();
   portalSprite.fill(255, 70, 70, 100);
   portalSprite.circle(0, 0, 40);
-
   portalSprite.fill(170, 32, 32);
   portalSprite.rect(-14, -14, 28, 28);
-
   portalSprite.fill(255, 110, 110);
   portalSprite.rect(-10, -10, 20, 20);
-
   portalSprite.pop();
 }
 
@@ -266,7 +250,6 @@ function generateVignette() {
   vignetteImage = createGraphics(width, height);
   vignetteImage.clear();
   vignetteImage.noFill();
-
   for (let i = 0; i < 40; i++) {
     const alpha = map(i, 0, 40, 0, 180);
     vignetteImage.stroke(0, 0, 0, alpha);
@@ -288,7 +271,6 @@ function drawNpcsOnMap() {
     const cx = n.x * TILE + TILE / 2;
     const cy = n.y * TILE + TILE / 2;
     image(npcSprite, cx, cy);
-
     push();
     imageMode(CENTER);
     fill(255, 255, 255, 220);
@@ -306,7 +288,6 @@ function drawPortalsOnMap() {
     const cx = n.x * TILE + TILE / 2;
     const cy = n.y * TILE + TILE / 2;
     const pulse = sin(frameCount * 0.09) * 4;
-
     push();
     imageMode(CENTER);
     noStroke();
@@ -320,7 +301,6 @@ function drawPortalsOnMap() {
 function drawLighting() {
   const cx = player.x * TILE + TILE / 2;
   const cy = player.y * TILE + TILE / 2;
-
   push();
   imageMode(CENTER);
   noStroke();
@@ -362,22 +342,16 @@ function tryMove(dx, dy) {
   }
 }
 
-function checkNPC() {
-  for (let n of npcs) {
-    if (player.x === n.x && player.y === n.y && !n.portal) {
-      openDialog(n.name, n.talk);
-    }
-  }
-}
-
+// 改良版中文折行，預留安全邊距，防止溢位
 function wrapTextChinese(str, maxW) {
+  const safeMax = maxW - 8;
   let out = [];
   let line = "";
   for (let ch of str) {
-    if (textWidth(line + ch) < maxW) {
+    if (textWidth(line + ch) < safeMax) {
       line += ch;
     } else {
-      out.push(line);
+      if (line) out.push(line);
       line = ch;
     }
   }
@@ -386,11 +360,12 @@ function wrapTextChinese(str, maxW) {
 }
 
 function openDialog(name, txt) {
+  if (!txt || txt.trim() === "") return;
   dialog.active = true;
-  dialog.speaker = name;
+  dialog.speaker = name || "";
   dialog.fullText = txt;
-  dialog.displayed = "";
-  dialog.lines = wrapTextChinese(txt, dialog.boxW - 48);
+  dialog.displayText = "";
+  dialog.lines = [];
   dialog.timer = 0;
   dialog.done = false;
 }
@@ -400,9 +375,9 @@ function updateDialog() {
   dialog.timer++;
   if (dialog.timer >= dialog.charGap) {
     dialog.timer = 0;
-    if (dialog.displayed.length < dialog.fullText.length) {
-      dialog.displayed = dialog.fullText.substring(0, dialog.displayed.length + 1);
-      dialog.lines = wrapTextChinese(dialog.displayed, dialog.boxW - 48);
+    if (dialog.displayText.length < dialog.fullText.length) {
+      dialog.displayText = dialog.fullText.substring(0, dialog.displayText.length + 1);
+      dialog.lines = wrapTextChinese(dialog.displayText, dialog.boxW - dialog.padding * 2);
     } else {
       dialog.done = true;
     }
@@ -412,46 +387,46 @@ function updateDialog() {
 function drawDialog() {
   if (!dialog.active) return;
   push();
-
   const bx = width / 2 - dialog.boxW / 2;
   const by = height - 160;
-
   fill(10, 10, 16, 240);
   noStroke();
   rect(bx, by, dialog.boxW, dialog.boxH, 14);
-
   stroke(120, 90, 180);
   strokeWeight(2);
   rect(bx, by, dialog.boxW, dialog.boxH, 14);
-
   noStroke();
+
+  // 講者名
   fill(212, 204, 236);
   textSize(18);
   textAlign(LEFT, TOP);
-  text(dialog.speaker, bx + 28, by + 18);
+  text(dialog.speaker, bx + dialog.padding, by + 18);
 
-  fill(242);
+  // 正文
+  fill(245);
   textSize(16);
-  let lh = 26;
+  const lineHeight = 26;
+  const startY = by + 48;
   for (let i = 0; i < dialog.lines.length; i++) {
-    text(dialog.lines[i], bx + 28, by + 48 + i * lh);
+    text(dialog.lines[i], bx + dialog.padding, startY + i * lineHeight);
   }
 
+  // 提示文字，固定放右下角，唔會被遮
   if (dialog.done) {
     fill(170);
     textAlign(RIGHT, BOTTOM);
     textSize(14);
-    text("[空格 繼續]", bx + dialog.boxW - 28, by + dialog.boxH - 18);
+    text("[空格 繼續]", bx + dialog.boxW - dialog.padding, by + dialog.boxH - 16);
   }
-
   pop();
 }
 
 function handleSpace() {
   if (!dialog.active) return;
   if (!dialog.done) {
-    dialog.displayed = dialog.fullText;
-    dialog.lines = wrapTextChinese(dialog.fullText, dialog.boxW - 48);
+    dialog.displayText = dialog.fullText;
+    dialog.lines = wrapTextChinese(dialog.fullText, dialog.boxW - dialog.padding * 2);
     dialog.done = true;
   } else {
     dialog.active = false;
