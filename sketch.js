@@ -1,4 +1,4 @@
-const TILE = 32;
+const TILE = 60;
 const ROOM_COLS = 16;
 const ROOM_ROWS = 12;
 const WIDTH = ROOM_COLS * TILE;
@@ -6,6 +6,16 @@ const HEIGHT = ROOM_ROWS * TILE;
 const WALL = 1;
 const FLOOR = 0;
 const SAVE_KEY = "moonlit_ruins_save_v1";
+let playerSprite = null;
+let maidImg = null;
+let isTalking = false;
+let dialogueIndex = 0;
+
+const dialogueLines = [
+  "女仆：主人，您终于来了……",
+  "女仆：这座废墟里充满了不详的气息。",
+  "女仆：请小心，千万不要回头……"
+];
 
 const itemCatalog = {
   brass_key: {
@@ -294,8 +304,16 @@ const audioSystem = {
   ambienceGain: null,
   bgmGain: null,
   started: false,
+  muted: false,
   ambientNodes: [],
   bgmInterval: null,
+
+  setMuted(muted) {
+    this.muted = muted;
+    if (!this.masterGain || !this.ctx) return;
+    const target = muted ? 0 : 0.16;
+    this.masterGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.08);
+  },
 
   ensureContext() {
     if (this.ctx) return;
@@ -516,6 +534,32 @@ function loadSaveSlot(slotIndex) {
   return true;
 }
 
+function stripPinkBackground(img) {
+  if (!img) return img;
+  img.loadPixels();
+  const pinkThreshold = 220;
+
+  for (let i = 0; i < img.pixels.length; i += 4) {
+    const r = img.pixels[i];
+    const g = img.pixels[i + 1];
+    const b = img.pixels[i + 2];
+    const a = img.pixels[i + 3];
+
+    const isPink = r > pinkThreshold && g < 180 && b > 150 && a > 0;
+    if (isPink) {
+      img.pixels[i + 3] = 0;
+    }
+  }
+
+  img.updatePixels();
+  return img;
+}
+
+function preload() {
+  playerSprite = stripPinkBackground(loadImage("player.png"));
+  maidImg = loadImage("maid.png");
+}
+
 function setup() {
   createCanvas(WIDTH, HEIGHT);
   pixelDensity(1);
@@ -567,10 +611,58 @@ function draw() {
   drawRoom();
   drawParticles();
   drawObjects();
+
+  const maidX = 670;
+  const maidY = 210 + sin(frameCount * 0.06) * 8;
+  if (maidImg) {
+    push();
+    imageMode(CENTER);
+    fill(0, 0, 0, 42);
+    ellipse(maidX, maidY + 70, 36, 12);
+    image(maidImg, maidX, maidY, 48, 64);
+    pop();
+  }
+
+  const px = game.player.x * TILE + TILE / 2;
+  const py = game.player.y * TILE + TILE / 2;
+  const distanceToMaid = dist(px, py, maidX, maidY);
+
+  if (distanceToMaid < 80 && !isTalking) {
+    push();
+    fill(240, 228, 195, 220);
+    textSize(13);
+    textAlign(CENTER, CENTER);
+    text("按 Z 键交談", width / 2, height - 36);
+    pop();
+  }
+
+  if (isTalking) {
+    const boxX = 52;
+    const boxY = height - 155;
+    const boxW = width - 104;
+    const boxH = 110;
+
+    push();
+    fill(0, 0, 0, 200);
+    rect(boxX, boxY, boxW, boxH, 8);
+    stroke(255, 255, 255, 190);
+    strokeWeight(2);
+    rect(boxX + 2, boxY + 2, boxW - 4, boxH - 4, 6);
+    noStroke();
+
+    fill(255, 255, 255, 235);
+    textSize(15);
+    textAlign(LEFT, CENTER);
+    text(dialogueLines[dialogueIndex] || "", boxX + 24, boxY + boxH / 2);
+    textAlign(CENTER, CENTER);
+    pop();
+  }
+
   drawPlayer();
   drawHud();
   drawMessage();
   drawDialogue();
+  drawFilmVignette();
   if (game.ui.inventoryOpen) {
     drawInventoryPanel();
   }
@@ -688,6 +780,18 @@ function keyPressed() {
   const actionKey = key === " " || key === "z" || key === "Z" || keyCode === 32;
   const confirmKey = key === "Enter" || keyCode === ENTER;
 
+  if (isTalking) {
+    if (key === "z" || key === "Z" || keyCode === 90) {
+      if (dialogueIndex < dialogueLines.length - 1) {
+        dialogueIndex += 1;
+      } else {
+        isTalking = false;
+        dialogueIndex = 0;
+      }
+    }
+    return;
+  }
+
   if (game.state === "death") {
     if (confirmKey || actionKey || key === " " || key === "Enter") {
       respawnPlayerToStart();
@@ -762,7 +866,29 @@ function keyPressed() {
     return;
   }
 
+  if (key === "m" || key === "M") {
+    audioSystem.ensureContext();
+    if (audioSystem.ctx) {
+      audioSystem.setMuted(!audioSystem.muted);
+      game.ui.message = audioSystem.muted ? "背景音樂已靜音。" : "背景音樂已開啟。";
+    }
+    return;
+  }
+
   if (actionKey) {
+    const px = game.player.x * TILE + TILE / 2;
+    const py = game.player.y * TILE + TILE / 2;
+    const maidX = 670;
+    const maidY = 210 + sin(frameCount * 0.06) * 8;
+    const distanceToMaid = dist(px, py, maidX, maidY);
+
+    if (distanceToMaid < 80) {
+      isTalking = true;
+      dialogueIndex = 0;
+      game.ui.message = "女仆正在與你對話。";
+      return;
+    }
+
     interactWithFacingTile();
     return;
   }
@@ -796,13 +922,13 @@ function keyPressed() {
     return;
   }
 
-  if (keyCode === LEFT_ARROW) {
+  if (keyCode === LEFT_ARROW || key === "a" || key === "A") {
     attemptMove(-1, 0, "left");
-  } else if (keyCode === RIGHT_ARROW) {
+  } else if (keyCode === RIGHT_ARROW || key === "d" || key === "D") {
     attemptMove(1, 0, "right");
-  } else if (keyCode === UP_ARROW) {
+  } else if (keyCode === UP_ARROW || key === "w" || key === "W") {
     attemptMove(0, -1, "up");
-  } else if (keyCode === DOWN_ARROW) {
+  } else if (keyCode === DOWN_ARROW || key === "s" || key === "S") {
     attemptMove(0, 1, "down");
   }
 }
@@ -1017,120 +1143,148 @@ function advanceDialogue() {
   panel.displayed = 0;
 }
 
-function drawRoom() {
-  const room = game.room;
-  const pulse = sin(frameCount * 0.04) * 8;
-  const px = game.player.x * TILE + TILE / 2;
-  const py = game.player.y * TILE + TILE / 2;
-  const lightRadius = 150 + sin(frameCount * 0.08) * 18;
+function drawFloorTile(x, y, size) {
+  const px = x * size;
+  const py = y * size;
 
   noStroke();
-  fill(8, 11, 17);
-  rect(0, 0, WIDTH, HEIGHT);
+  fill(29, 29, 27, 220);
+  rect(px, py, size, size);
 
-  fill(16, 22, 30, 220);
-  rect(0, 0, WIDTH, HEIGHT * 0.7);
+  const base = 41 + ((x * 7 + y * 5) % 10);
+  fill(base, 38 + ((x + y) % 4), 32 + ((x * 2 + y) % 3), 185);
+  rect(px + 3, py + 3, size - 6, size - 6);
 
-  fill(29, 38, 47, 210);
-  rect(0, HEIGHT * 0.68, WIDTH, HEIGHT * 0.32);
+  stroke(104, 92, 77, 52);
+  for (let i = 0; i < 7; i++) {
+    const yy = py + 8 + i * 7 + ((x + i) % 2);
+    line(px + 8, yy, px + size - 8, yy + random(-2, 2));
+  }
+  noStroke();
 
-  fill(183, 195, 211, 14);
-  rect(0, 0, WIDTH, HEIGHT);
+  fill(136, 120, 98, 18);
+  rect(px + 10, py + 10, size - 20, size - 20);
+
+  fill(165, 146, 117, 15);
+  for (let i = 0; i < 6; i++) {
+    const rx = px + 8 + ((i * 17 + x * 9) % (size - 14));
+    const ry = py + 9 + ((i * 19 + y * 13) % (size - 18));
+    rect(rx, ry, 2, 2);
+  }
+
+  stroke(90, 81, 70, 22);
+  line(px + 18, py + 12, px + size - 18, py + size - 14);
+  line(px + 12, py + size - 18, px + size - 14, py + 16);
+  noStroke();
+}
+
+function drawWallTile(x, y, size) {
+  const px = x * size;
+  const py = y * size;
+  const shade = 62 + ((x * 3 + y * 2) % 6) * 2;
+
+  noStroke();
+  fill(shade, 58 + ((x + y) % 3), 53 + ((x * 2 + y) % 4), 210);
+  rect(px, py, size, size);
+
+  fill(32, 27, 25, 120);
+  rect(px + 6, py + 6, size - 12, size - 12);
+
+  stroke(126, 112, 92, 55);
+  for (let i = 0; i < 4; i++) {
+    const yy = py + 10 + i * 15;
+    line(px + 10, yy, px + size - 10, yy + random(-2, 2));
+  }
+  noStroke();
+
+  stroke(88, 76, 64, 38);
+  bezier(px + 12, py + 16, px + 28, py + 24, px + 34, py + 40, px + 52, py + 60);
+  bezier(px + 30, py + 14, px + 42, py + 28, px + 54, py + 38, px + size - 18, py + size - 18);
+  noStroke();
+
+  fill(100, 91, 77, 26);
+  rect(px + 10, py + 8, size * 0.18, size * 0.42);
+  rect(px + size * 0.72, py + 12, size * 0.15, size * 0.36);
+  fill(138, 125, 105, 18);
+  ellipse(px + size * 0.28, py + size * 0.24, size * 0.14, size * 0.28);
+  ellipse(px + size * 0.76, py + size * 0.34, size * 0.12, size * 0.22);
+}
+
+function drawRoom() {
+  const room = game.room;
+  const px = game.player.x * TILE + TILE / 2;
+  const py = game.player.y * TILE + TILE / 2;
+
+  background(10, 12, 16);
 
   for (let y = 0; y < ROOM_ROWS; y++) {
     for (let x = 0; x < ROOM_COLS; x++) {
-      const tileX = x * TILE;
-      const tileY = y * TILE;
-      const tile = room.tiles[y][x];
-
-      if (tile === WALL) {
-        const brickShade = 48 + ((x + y) % 3) * 6;
-        fill(brickShade, 56 + ((x + y) % 3) * 4, 62 + ((x + y) % 2) * 5);
-        rect(tileX, tileY, TILE, TILE);
-
-        fill(26, 31, 38, 200);
-        rect(tileX + 2, tileY + 2, TILE - 4, TILE - 4);
-
-        fill(80, 89, 96, 90);
-        rect(tileX + 3, tileY + 4, TILE - 6, 2);
-        rect(tileX + 3, tileY + 12, TILE - 6, 2);
-
-        fill(72, 80, 88, 70);
-        rect(tileX + 6, tileY + 9, 4, TILE - 18);
-
-        fill(130, 140, 152, 55);
-        rect(tileX + 11, tileY + 6, 2, 8);
-        rect(tileX + 5, tileY + 15, 2, 6);
-      } else {
-        fill(18, 25, 33);
-        rect(tileX, tileY, TILE, TILE);
-
-        fill(29, 39, 48, 150);
-        rect(tileX + 2, tileY + 2, TILE - 4, TILE - 4);
-
-        if ((x + y) % 2 === 0) {
-          fill(23, 31, 40, 78);
-          rect(tileX + 4, tileY + 5, TILE - 8, 2);
-        }
-
-        fill(58, 68, 77, 35);
-        rect(tileX + 11, tileY + 11, 2, 8);
-      }
+      if (room.tiles[y][x] === WALL) drawWallTile(x, y, TILE);
+      else drawFloorTile(x, y, TILE);
     }
   }
 
-  fill(185, 164, 118, 26);
-  rect(12 * TILE - 8, 2 * TILE - 4, 95, 60, 16);
-  fill(226, 214, 167, 18);
-  ellipse(12 * TILE + 8, 2 * TILE + 10, 220, 130);
-  fill(234, 241, 248, 16);
-  ellipse(12 * TILE + 8, 2 * TILE + 10, 155 + pulse, 82 + pulse);
+  const moonX = WIDTH * 0.76;
+  const moonY = HEIGHT * 0.2;
+  fill(214, 214, 181, 26);
+  ellipse(moonX, moonY, 250, 170);
+  fill(240, 228, 176, 17);
+  ellipse(moonX, moonY, 150, 90);
 
-  fill(42, 52, 58, 180);
-  rect(22, 18, 90, 64, 8);
-  fill(69, 86, 101, 120);
-  rect(30, 26, 74, 48, 6);
-  fill(200, 215, 230, 28);
-  rect(38, 34, 58, 32, 5);
-
-  for (let i = 12; i > 0; i--) {
-    const alpha = 18 + i * 14;
-    fill(172, 200, 220, alpha);
-    ellipse(px, py, 90 + i * 20 + pulse, 90 + i * 20 + pulse);
-  }
-
-  fill(255, 200, 120, 26);
-  ellipse(px, py, 60, 60);
-
-  const darkness = drawingContext.createRadialGradient(px, py, 28, px, py, lightRadius);
-  darkness.addColorStop(0, "rgba(255, 214, 148, 0.20)");
-  darkness.addColorStop(0.18, "rgba(255, 214, 148, 0.12)");
-  darkness.addColorStop(0.48, "rgba(25, 30, 35, 0.42)");
-  darkness.addColorStop(1, "rgba(0, 0, 0, 0.98)");
-  drawingContext.fillStyle = darkness;
+  const globalGlow = drawingContext.createRadialGradient(width * 0.5, height * 0.5, 50, width * 0.5, height * 0.5, width * 0.9);
+  globalGlow.addColorStop(0, "rgba(166, 184, 214, 0.10)");
+  globalGlow.addColorStop(0.6, "rgba(22, 26, 32, 0.14)");
+  globalGlow.addColorStop(1, "rgba(0, 0, 0, 0.72)");
+  drawingContext.fillStyle = globalGlow;
   drawingContext.fillRect(0, 0, width, height);
 
-  fill(0, 0, 0, 15);
-  rect(0, 0, width, height);
+  const ruinSilhouettes = [
+    { x: 160, y: 90, w: 110, h: 60 },
+    { x: 620, y: 80, w: 150, h: 70 },
+    { x: 820, y: 110, w: 120, h: 60 },
+    { x: 110, y: 360, w: 90, h: 50 }
+  ];
 
-  fill(0, 0, 0, 62);
-  ellipse(px, py + 18, 20, 9);
-
-  fill(13, 17, 22, 172);
-  rect(0, 0, WIDTH, 18);
-  rect(0, HEIGHT - 18, WIDTH, 18);
-
-  stroke(210, 228, 246, 10);
-  for (let x = 0; x <= ROOM_COLS; x++) {
-    line(x * TILE, 0, x * TILE, HEIGHT);
-  }
-  for (let y = 0; y <= ROOM_ROWS; y++) {
-    line(0, y * TILE, WIDTH, y * TILE);
-  }
+  push();
   noStroke();
+  fill(7, 9, 12, 120);
+  for (const s of ruinSilhouettes) {
+    beginShape();
+    vertex(s.x, s.y + s.h);
+    vertex(s.x + 18, s.y + s.h - 10);
+    vertex(s.x + 30, s.y + 12);
+    vertex(s.x + 52, s.y + s.h - 12);
+    vertex(s.x + 72, s.y + 18);
+    vertex(s.x + s.w - 12, s.y + 30);
+    vertex(s.x + s.w, s.y + s.h);
+    endShape(CLOSE);
+  }
+  pop();
 
-  fill(116, 136, 158, 22);
-  rect(4, 4, WIDTH - 8, HEIGHT - 8, 8);
+  for (let i = 0; i < 36; i++) {
+    const dx = (noise(i * 18, frameCount * 0.05) * width + i * 27) % width;
+    const dy = (noise(i * 21, frameCount * 0.04) * height + i * 41) % height;
+    fill(200, 210, 220, 14 + (i % 6) * 4);
+    ellipse(dx, dy, 2.2, 2.2);
+  }
+
+  const fogBand = drawingContext.createLinearGradient(0, 0, 0, height);
+  fogBand.addColorStop(0, "rgba(90, 96, 108, 0.08)");
+  fogBand.addColorStop(0.5, "rgba(98, 102, 110, 0.04)");
+  fogBand.addColorStop(1, "rgba(0, 0, 0, 0.18)");
+  drawingContext.fillStyle = fogBand;
+  drawingContext.fillRect(0, 0, width, height);
+
+  const localLight = drawingContext.createRadialGradient(px, py, 12, px, py, 220);
+  localLight.addColorStop(0, "rgba(255, 203, 126, 0.24)");
+  localLight.addColorStop(0.25, "rgba(255, 191, 122, 0.12)");
+  localLight.addColorStop(0.75, "rgba(20, 22, 26, 0.42)");
+  localLight.addColorStop(1, "rgba(0, 0, 0, 0.88)");
+  drawingContext.fillStyle = localLight;
+  drawingContext.fillRect(0, 0, width, height);
+
+  fill(0, 0, 0, 18);
+  ellipse(px, py + 18, 36, 12);
 }
 
 function drawParticles() {
@@ -1141,15 +1295,15 @@ function drawParticles() {
       p.x = random(WIDTH);
     }
 
-    fill(184, 205, 224, p.alpha);
-    ellipse(p.x, p.y, p.r + 0.9, p.r + 0.9);
+    fill(190, 198, 206, p.alpha);
+    ellipse(p.x, p.y, p.r + 0.8, p.r + 0.8);
   }
 
-  for (let i = 0; i < 24; i++) {
-    const fogX = (i * 67 + frameCount * 0.35) % (WIDTH + 70) - 35;
-    const fogY = (i * 97 + frameCount * 0.22) % (HEIGHT + 80) - 20;
-    fill(176, 191, 214, 10 + i % 8);
-    ellipse(fogX, fogY, 140, 50);
+  for (let i = 0; i < 28; i++) {
+    const fogX = (i * 67 + frameCount * 0.35) % (WIDTH + 60) - 30;
+    const fogY = (i * 97 + frameCount * 0.18) % (HEIGHT + 80) - 20;
+    fill(168, 176, 190, 10 + i % 7);
+    ellipse(fogX, fogY, 144, 48);
   }
 }
 
@@ -1161,147 +1315,101 @@ function drawObjects() {
     const py = obj.y * TILE + TILE / 2;
 
     if (obj.kind === "npc") {
-      const bob = sin(frameCount * 0.16 + obj.x * 1.5) * 1.6;
-      drawNpcSprite(px, py + bob, {
-        skin: [220, 188, 166],
-        hair: [52, 42, 50],
-        clothes: [80, 94, 106],
-        cloak: [60, 68, 76],
-        trim: [142, 120, 100],
-        facing: game.player.facing,
-        walk: 0,
-        scale: 1.2
-      });
       continue;
     }
 
     if (obj.kind === "furniture") {
       if (obj.id === "painting") {
-        fill(70, 49, 41, 180);
-        rect(px - 17, py - 19, 34, 38, 3);
-        fill(147, 112, 74, 190);
-        rect(px - 13, py - 15, 26, 30);
-        fill(90, 75, 67, 155);
-        rect(px - 9, py - 11, 18, 22);
-        fill(235, 214, 146, 90);
-        ellipse(px, py - 2, 12, 12);
+        fill(70, 58, 48, 190);
+        rect(px - 24, py - 28, 48, 56, 6);
+        fill(116, 94, 72, 210);
+        rect(px - 18, py - 22, 36, 44, 4);
+        fill(210, 188, 143, 150);
+        ellipse(px, py - 4, 18, 14);
+        fill(88, 80, 72, 120);
+        rect(px - 8, py + 8, 16, 8, 3);
       } else if (obj.id === "clock") {
-        fill(76, 68, 61, 190);
-        rect(px - 12, py - 12, 24, 24, 5);
-        fill(214, 195, 169, 220);
-        ellipse(px, py, 9, 9);
-        stroke(214, 195, 169, 170);
-        line(px, py, px, py - 6);
-        line(px, py, px + 4, py + 2);
+        fill(78, 67, 58, 210);
+        rect(px - 18, py - 18, 36, 36, 7);
+        fill(212, 194, 154, 210);
+        ellipse(px, py, 12, 12);
+        stroke(212, 194, 154, 170);
+        line(px, py, px, py - 9);
+        line(px, py, px + 7, py + 3);
         noStroke();
       } else if (obj.id === "cabinet") {
-        fill(95, 70, 56, 192);
-        rect(px - 16, py - 13, 32, 26, 4);
-        fill(61, 47, 38, 170);
-        rect(px - 12, py - 9, 24, 18);
-        fill(138, 106, 84, 120);
-        rect(px - 10, py - 6, 20, 3);
+        fill(82, 66, 55, 195);
+        rect(px - 23, py - 20, 46, 36, 7);
+        fill(58, 45, 38, 180);
+        rect(px - 15, py - 12, 30, 24, 4);
+        fill(174, 138, 105, 150);
+        rect(px - 11, py - 7, 22, 3);
+        fill(100, 87, 76, 120);
+        rect(px - 18, py + 10, 36, 4, 2);
+      } else if (obj.id === "library_manuscript") {
+        fill(92, 72, 58, 180);
+        rect(px - 21, py - 18, 42, 40, 7);
+        fill(218, 205, 170, 165);
+        rect(px - 15, py - 12, 30, 26, 4);
+        fill(95, 78, 60, 110);
+        for (let i = 0; i < 3; i++) {
+          rect(px - 10 + i * 8, py - 10, 5, 20);
+        }
+      } else {
+        fill(90, 74, 60, 180);
+        rect(px - 18, py - 18, 36, 36, 6);
+        fill(192, 166, 124, 120);
+        rect(px - 10, py - 12, 20, 14, 3);
       }
     } else if (obj.kind === "door") {
-      fill(119, 88, 65, 210);
-      rect(px - 15, py - 18, 30, 36, 4);
-      fill(52, 38, 30, 170);
-      rect(px - 3, py - 8, 6, 22);
-      fill(210, 184, 136, 90);
-      rect(px + 6, py - 10, 5, 18);
+      fill(92, 72, 58, 210);
+      rect(px - 22, py - 30, 44, 60, 8);
+      fill(42, 31, 24, 180);
+      rect(px - 3, py - 15, 6, 30);
+      fill(214, 184, 130, 120);
+      rect(px + 8, py - 15, 6, 24);
       if (obj.locked) {
-        fill(196, 109, 94, 180);
-        ellipse(px + 9, py - 4, 5, 5);
+        fill(173, 80, 70, 190);
+        ellipse(px + 13, py - 6, 9, 9);
       }
     } else if (obj.kind === "savePoint") {
-      fill(141, 158, 181, 190);
-      rect(px - 12, py - 12, 24, 24, 5);
-      fill(220, 233, 245, 210);
-      rect(px - 5, py - 5, 10, 10);
-      fill(127, 146, 175, 130);
-      ellipse(px, py + 12, 16, 6);
+      fill(84, 82, 68, 220);
+      rect(px - 14, py - 14, 28, 28, 6);
+      fill(220, 221, 212, 210);
+      rect(px - 8, py - 8, 16, 16);
+      fill(138, 148, 149, 140);
+      ellipse(px, py + 14, 24, 8);
     } else if (obj.kind === "trap") {
-      fill(66, 43, 51, 210);
-      rect(px - 10, py - 10, 20, 20, 4);
-      fill(186, 71, 84, 200);
-      ellipse(px, py, 10, 10);
-      fill(255, 167, 173, 75);
+      fill(54, 42, 42, 205);
+      rect(px - 12, py - 12, 24, 24, 4);
+      fill(165, 82, 78, 200);
+      ellipse(px, py, 11, 11);
+      fill(250, 184, 175, 82);
       ellipse(px, py, 18, 18);
     } else if (obj.kind === "pickup") {
-      fill(172, 146, 96, 220);
-      rect(px - 8, py - 8, 16, 16, 3);
-      fill(245, 221, 126, 225);
-      ellipse(px, py, 8, 8);
-      fill(255, 244, 182, 120);
-      ellipse(px, py, 13, 13);
+      push();
+      translate(px, py);
+      fill(110, 132, 136, 120);
+      ellipse(0, 0, 20, 20);
+      stroke(234, 215, 146, 220);
+      strokeWeight(2);
+      noFill();
+      beginShape();
+      vertex(-6, -2);
+      bezierVertex(-2, -10, 2, -10, 6, -2);
+      bezierVertex(8, 4, 8, 10, 0, 12);
+      bezierVertex(-8, 10, -8, 4, -6, -2);
+      endShape(CLOSE);
+      noStroke();
+      fill(255, 232, 156, 200);
+      ellipse(0, 0, 8, 8);
+      fill(255, 255, 255, 50);
+      ellipse(-3, -2, 5, 5);
+      pop();
     } else {
-      fill(166, 179, 194, 180);
-      rect(px - 6, py - 6, 12, 12);
+      fill(134, 142, 150, 170);
+      rect(px - 8, py - 8, 16, 16);
     }
-  }
-}
-
-function drawCharacterSprite(x, y, options = {}) {
-  const {
-    skin = [228, 188, 142],
-    hair = [53, 40, 48],
-    clothes = [74, 82, 96],
-    cloak = [38, 45, 54],
-    trim = [154, 129, 94],
-    facing = "down",
-    walk = 0,
-    scale = 1,
-    shadow = true,
-    silhouette = false
-  } = options;
-
-  const sx = x;
-  const sy = y + walk;
-
-  if (shadow) {
-    fill(0, 0, 0, 65);
-    ellipse(sx, sy + 18 * scale, 22 * scale, 10 * scale);
-  }
-
-  const coatBody = silhouette ? [50, 56, 63] : clothes;
-  const coatColor = color(...coatBody);
-  fill(coatColor.levels ? coatColor.levels.slice(0, 3) : coatBody);
-  rect(sx - 10 * scale, sy - 2 * scale, 20 * scale, 18 * scale, 4 * scale);
-
-  fill(silhouette ? [90, 96, 106] : cloak);
-  quad(
-    sx - 12 * scale, sy + 1 * scale,
-    sx + 12 * scale, sy + 1 * scale,
-    sx + 15 * scale, sy + 18 * scale,
-    sx - 15 * scale, sy + 18 * scale
-  );
-
-  fill(silhouette ? [50, 50, 58] : hair);
-  rect(sx - 9 * scale, sy - 18 * scale, 18 * scale, 8 * scale, 4 * scale);
-  rect(sx - 6 * scale, sy - 23 * scale, 12 * scale, 8 * scale, 3 * scale);
-
-  fill(skin);
-  ellipse(sx, sy - 16 * scale, 12 * scale, 12 * scale);
-
-  fill(22, 26, 31, 180);
-  rect(sx - 3 * scale, sy - 17 * scale, 6 * scale, 2 * scale);
-
-  fill(silhouette ? [94, 101, 112] : trim);
-  rect(sx - 9 * scale, sy + 4 * scale, 18 * scale, 4 * scale, 2 * scale);
-
-  fill(silhouette ? [32, 36, 42] : [62, 72, 82]);
-  rect(sx - 7 * scale, sy + 16 * scale, 5 * scale, 12 * scale);
-  rect(sx + 2 * scale, sy + 16 * scale, 5 * scale, 12 * scale);
-
-  fill(silhouette ? [118, 126, 136] : [90, 108, 123]);
-  if (facing === "left") {
-    rect(sx - 16 * scale, sy - 2 * scale, 4 * scale, 3 * scale);
-  } else if (facing === "right") {
-    rect(sx + 12 * scale, sy - 2 * scale, 4 * scale, 3 * scale);
-  } else if (facing === "up") {
-    rect(sx - 1 * scale, sy - 28 * scale, 3 * scale, 6 * scale);
-  } else {
-    rect(sx - 1 * scale, sy + 18 * scale, 3 * scale, 6 * scale);
   }
 }
 
@@ -1310,64 +1418,56 @@ function drawPlayer() {
   const py = game.player.y * TILE + TILE / 2;
   const idlePulse = sin(frameCount * 0.05) * 1.4;
   const walkBob = sin(frameCount * 0.2) * 2.8;
-  const stepFrame = Math.floor((frameCount * 0.12) % 3);
   const bodyY = py + (game.state === "play" ? walkBob : idlePulse);
-  drawCharacterSprite(px, bodyY, {
-    skin: [226, 188, 142],
-    hair: [50, 40, 48],
-    clothes: [82, 95, 106],
-    cloak: [52, 61, 72],
-    trim: [144, 120, 95],
-    facing: game.player.facing,
-    walk: stepFrame === 0 ? -2 : stepFrame === 1 ? 0 : 2,
-    scale: 1,
-    shadow: true
-  });
-}
 
-function drawNpcSprite(x, y, options = {}) {
-  const stepFrame = Math.floor((frameCount * 0.14) % 3);
-  drawCharacterSprite(x, y, {
-    ...options,
-    walk: stepFrame === 0 ? -2 : stepFrame === 1 ? 0 : 2,
-    scale: options.scale || 1.12
-  });
+  if (!playerSprite) return;
+
+  push();
+  imageMode(CENTER);
+  translate(px, bodyY);
+  if (game.player.facing === "left") {
+    scale(-1, 1);
+  }
+  fill(0, 0, 0, 42);
+  ellipse(0, 20, 28, 10);
+  image(playerSprite, 0, 0, 64, 64);
+  pop();
 }
 
 function drawPortrait(type, x, y, size = 42) {
   push();
   translate(x, y);
   if (type === "maid") {
-    fill(88, 75, 84, 220);
-    rect(-size * 0.46, -size * 0.08, size * 0.92, size * 0.7, 10);
-    fill(224, 204, 176);
-    ellipse(0, -size * 0.22, size * 0.38, size * 0.38);
+    fill(90, 75, 72, 220);
+    rect(-size * 0.46, -size * 0.08, size * 0.92, size * 0.7, 12);
+    fill(228, 205, 180);
+    ellipse(0, -size * 0.24, size * 0.38, size * 0.38);
     fill(52, 44, 48);
-    rect(-size * 0.22, -size * 0.42, size * 0.44, size * 0.24, 6);
-    fill(142, 123, 118, 220);
+    rect(-size * 0.22, -size * 0.44, size * 0.44, size * 0.26, 6);
+    fill(136, 119, 108, 220);
     rect(-size * 0.3, size * 0.1, size * 0.6, size * 0.34, 8);
     fill(75, 64, 72, 200);
-    rect(-size * 0.1, size * 0.42, size * 0.2, size * 0.26, 6);
+    rect(-size * 0.1, size * 0.4, size * 0.2, size * 0.28, 6);
   } else if (type === "shadow") {
-    fill(44, 42, 48, 220);
-    rect(-size * 0.46, -size * 0.08, size * 0.92, size * 0.7, 10);
-    fill(78, 80, 88, 180);
+    fill(42, 38, 42, 224);
+    rect(-size * 0.46, -size * 0.08, size * 0.92, size * 0.7, 12);
+    fill(76, 78, 84, 180);
     ellipse(0, -size * 0.18, size * 0.34, size * 0.34);
-    fill(28, 30, 34, 210);
+    fill(18, 22, 28, 210);
     rect(-size * 0.18, -size * 0.4, size * 0.36, size * 0.2, 6);
-    fill(60, 66, 74, 210);
+    fill(58, 62, 70, 210);
     rect(-size * 0.26, size * 0.12, size * 0.52, size * 0.30, 8);
   } else if (type === "scholar") {
-    fill(88, 82, 96, 220);
-    rect(-size * 0.46, -size * 0.08, size * 0.92, size * 0.72, 10);
+    fill(84, 78, 88, 220);
+    rect(-size * 0.46, -size * 0.08, size * 0.92, size * 0.72, 12);
     fill(224, 199, 170);
     ellipse(0, -size * 0.2, size * 0.36, size * 0.36);
     fill(64, 52, 58);
     rect(-size * 0.2, -size * 0.4, size * 0.4, size * 0.22, 6);
-    fill(118, 120, 138, 220);
+    fill(116, 120, 138, 220);
     rect(-size * 0.28, size * 0.1, size * 0.56, size * 0.28, 8);
   } else {
-    fill(95, 88, 92, 220);
+    fill(92, 84, 84, 220);
     rect(-size * 0.42, -size * 0.04, size * 0.84, size * 0.6, 10);
     fill(230, 200, 170);
     ellipse(0, -size * 0.18, size * 0.38, size * 0.38);
@@ -1380,53 +1480,78 @@ function drawPortrait(type, x, y, size = 42) {
 }
 
 function drawHud() {
-  fill(11, 18, 25, 215);
-  rect(10, 10, 170, 30, 8);
-  fill(240, 218, 152);
-  textSize(12);
-  text("時間：" + game.ui.timeText, 95, 26);
+  push();
+  noStroke();
 
-  fill(11, 18, 25, 215);
-  rect(width - 160, 10, 150, 30, 8);
-  fill(208, 222, 240);
+  fill(21, 18, 15, 180);
+  rect(12, 12, 176, 36, 9);
+  stroke(183, 149, 98, 160);
+  rect(14, 14, 172, 32, 7);
+  noStroke();
+
+  fill(241, 216, 166);
+  textSize(12);
+  textAlign(LEFT, CENTER);
+  text("時間：" + game.ui.timeText, 26, 31);
+
+  fill(21, 18, 15, 180);
+  rect(width - 166, 12, 154, 36, 9);
+  stroke(183, 149, 98, 160);
+  rect(width - 164, 14, 150, 32, 7);
+  noStroke();
+
+  fill(209, 220, 232);
   textSize(11);
-  text("目標：" + game.ui.targetText, width - 85, 26);
+  textAlign(LEFT, CENTER);
+  text("目標：" + game.ui.targetText, width - 152, 31);
 
   if (isAtSavePoint()) {
-    fill(160, 220, 188);
+    fill(164, 211, 180, 220);
     textSize(11);
-    text("S 儲存", width - 82, 52);
+    textAlign(RIGHT, CENTER);
+    text("S 儲存", width - 22, 52);
   }
+
+  textAlign(CENTER, CENTER);
+  pop();
 }
 
 function drawInventoryPanel() {
-  fill(12, 18, 24, 228);
-  rect(width * 0.18, height * 0.18, width * 0.64, height * 0.54, 12);
-  stroke(142, 176, 192, 120);
-  rect(width * 0.18 + 2, height * 0.18 + 2, width * 0.64 - 4, height * 0.54 - 4, 12);
+  const panelX = width * 0.18;
+  const panelY = height * 0.18;
+  const panelW = width * 0.64;
+  const panelH = height * 0.54;
+
+  fill(24, 19, 14, 214);
+  rect(panelX, panelY, panelW, panelH, 12);
+  stroke(168, 138, 92, 160);
+  rect(panelX + 3, panelY + 3, panelW - 6, panelH - 6, 10);
   noStroke();
 
-  fill(244, 214, 112);
+  fill(238, 219, 165, 230);
   textSize(18);
-  text("背包", width / 2, height * 0.27);
+  text("背包", width / 2, panelY + 30);
+
+  fill(84, 69, 55, 140);
+  rect(panelX + 20, panelY + 46, panelW - 40, 2, 2);
 
   const items = game.inventory.length ? game.inventory : ["空白背包"];
-  fill(230, 236, 243);
+  fill(228, 220, 196);
   textSize(13);
 
   for (let i = 0; i < items.length; i++) {
     const itemId = items[i];
     const item = itemCatalog[itemId] || { name: itemId };
     const isSelected = game.selectedItemId === itemId;
-    const y = height * (0.38 + i * 0.12);
+    const y = panelY + 88 + i * 54;
 
-    fill(isSelected ? 244 : 230, isSelected ? 214 : 236, isSelected ? 112 : 243);
+    fill(isSelected ? 250 : 228, isSelected ? 220 : 220, isSelected ? 150 : 196);
     text(`${i + 1}. ${item.name}`, width / 2 - 12, y);
 
     if (item.description) {
-      fill(170, 188, 204);
+      fill(185, 168, 141);
       textSize(11);
-      text(item.description, width / 2, y + 16);
+      text(item.description, width / 2, y + 18);
       textSize(13);
     }
   }
@@ -1435,11 +1560,19 @@ function drawInventoryPanel() {
 function drawMessage() {
   if (!game.ui.message) return;
 
-  fill(17, 25, 31, 220);
-  rect(18, height - 40, width - 36, 26, 8);
-  fill(236, 240, 244);
+  push();
+  fill(24, 20, 16, 210);
+  rect(18, height - 42, width - 36, 32, 8);
+  stroke(196, 172, 112, 180);
+  rect(20, height - 40, width - 40, 28, 6);
+  noStroke();
+
+  fill(242, 228, 198, 220);
   textSize(11);
-  text(game.ui.message, width / 2, height - 25);
+  textAlign(CENTER, CENTER);
+  text(game.ui.message, width / 2, height - 24);
+  textAlign(CENTER, CENTER);
+  pop();
 }
 
 function drawDialogue() {
@@ -1449,34 +1582,46 @@ function drawDialogue() {
   const current = panel.lines[panel.index];
   if (!current) return;
 
-  const boxX = 28;
-  const boxY = height - 110;
-  const boxW = width - 56;
-  const boxH = 82;
+  const boxX = 36;
+  const boxY = height - 138;
+  const boxW = width - 72;
+  const boxH = 100;
 
-  fill(18, 14, 22, 240);
-  rect(boxX, boxY, boxW, boxH, 12);
-  stroke(128, 103, 166, 200);
-  rect(boxX + 1, boxY + 1, boxW - 2, boxH - 2, 12);
+  push();
   noStroke();
+  fill(108, 86, 52, 110);
+  rect(boxX, boxY, boxW, boxH, 14);
+
+  fill(226, 212, 169, 240);
+  rect(boxX + 6, boxY + 6, boxW - 12, boxH - 12, 12);
+
+  fill(118, 94, 69, 120);
+  rect(boxX + 12, boxY + 12, boxW - 24, boxH - 24, 10);
+
+  for (let i = 0; i < 90; i++) {
+    const px = boxX + 16 + ((i * 19) % (boxW - 40)) + noise(i * 13, frameCount * 0.02) * 3;
+    const py = boxY + 18 + ((i * 23) % (boxH - 26)) + noise(i * 17, frameCount * 0.03) * 3;
+    fill(120, 101, 74, 28);
+    rect(px, py, 2, 2);
+  }
 
   const portraitType = current.portrait || "maid";
-  fill(82, 68, 100, 230);
-  rect(boxX + 14, boxY + 14, 46, 46, 8);
-  drawPortrait(portraitType, boxX + 36, boxY + 36, 22);
+  fill(89, 72, 58, 190);
+  rect(boxX + 22, boxY + 20, 58, 58, 10);
+  drawPortrait(portraitType, boxX + 51, boxY + 50, 28);
 
-  fill(244, 212, 112);
+  fill(92, 63, 42, 210);
   textSize(13);
   textAlign(LEFT, CENTER);
-  text(current.name, boxX + 74, boxY + 22);
+  text(current.name, boxX + 100, boxY + 28);
 
-  fill(205, 183, 226, 180);
-  rect(boxX + 74, boxY + 30, 90, 2, 2);
+  fill(128, 97, 62, 170);
+  rect(boxX + 100, boxY + 38, 120, 2, 2);
 
   const visibleText = current.text.slice(0, panel.displayed);
-  fill(230, 238, 247);
-  textSize(14);
-  text(visibleText, boxX + 74, boxY + 52, boxW - 92, 34);
+  fill(56, 41, 31, 220);
+  textSize(15);
+  text(visibleText, boxX + 100, boxY + 66, boxW - 128, 32);
   textAlign(CENTER, CENTER);
 
   if (panel.displayed < current.text.length) {
@@ -1484,64 +1629,70 @@ function drawDialogue() {
   }
 
   if (panel.displayed >= current.text.length && (panel.canSkip || panel.index < panel.lines.length - 1)) {
-    fill(206, 180, 240);
+    fill(120, 90, 62);
     textSize(11);
-    text("[ 空格 繼續 ]", boxX + boxW - 82, boxY + boxH - 12);
+    text("[ 空格 繼續 ]", boxX + boxW - 96, boxY + boxH - 16);
   }
+  pop();
 }
 
 function drawTitleScreen() {
-  background(6, 9, 15);
+  background(12, 15, 18);
   drawParticles();
 
-  fill(15, 19, 27, 170);
+  fill(18, 20, 24, 180);
   rect(0, 0, width, height);
 
-  fill(248, 220, 150, 80);
-  ellipse(width * 0.75, height * 0.22, 210, 210);
-  fill(250, 233, 187, 120);
-  ellipse(width * 0.75, height * 0.22, 140, 140);
+  fill(204, 180, 120, 42);
+  ellipse(width * 0.74, height * 0.18, 280, 260);
+  fill(234, 203, 130, 70);
+  ellipse(width * 0.74, height * 0.18, 170, 170);
 
-  fill(18, 23, 31, 210);
-  rect(width * 0.18, height * 0.18, width * 0.64, height * 0.62, 20);
-  stroke(196, 217, 230, 95);
-  rect(width * 0.18 + 2, height * 0.18 + 2, width * 0.64 - 4, height * 0.62 - 4, 20);
+  fill(18, 17, 15, 220);
+  rect(width * 0.16, height * 0.14, width * 0.68, height * 0.72, 22);
+  stroke(179, 148, 100, 110);
+  rect(width * 0.16 + 2, height * 0.14 + 2, width * 0.68 - 4, height * 0.72 - 4, 22);
   noStroke();
 
-  fill(248, 220, 150);
-  textSize(30);
-  text("Moonlit Ruins", width / 2, height * 0.30);
+  for (let i = 0; i < 120; i++) {
+    fill(128, 110, 82, 18 + (i % 8));
+    rect((i * 17) % width, (i * 29) % height, 2, 2);
+  }
 
-  fill(230, 238, 247);
+  fill(244, 222, 160);
+  textSize(34);
+  text("Moonlit Ruins", width / 2, height * 0.28);
+
+  fill(222, 214, 195);
   textSize(15);
-  text("多槽存檔 / 讀檔 / 結局系統", width / 2, height * 0.40);
+  text("多槽存檔 / 讀檔 / 結局系統", width / 2, height * 0.38);
 
-  fill(177, 208, 224);
-  textSize(14);
-  text("Enter：新遊戲", width / 2, height * 0.52);
+  fill(192, 206, 216);
+  textSize(15);
+  text("Enter：新遊戲   1 / 2 / 3：讀取存檔", width / 2, height * 0.51);
 
-  fill(214, 229, 242);
+  fill(203, 214, 223, 180);
   textSize(12);
-  text("1 / 2 / 3：讀取存檔槽", width / 2, height * 0.60);
+  text("WASD / 方向鍵 移動   Z / 空白 互動   M 靜音", width / 2, height * 0.60);
 
-  fill(177, 202, 220, 170);
+  fill(177, 194, 205, 170);
   textSize(11);
   text("你可以在存檔石碑前按 S 儲存，並於標題畫面讀取槽位。", width / 2, height * 0.72);
 
-  fill(248, 220, 150, 18);
-  rect(width * 0.22, height * 0.12, width * 0.56, 16, 10);
+  fill(244, 222, 160, 18);
+  rect(width * 0.22, height * 0.10, width * 0.56, 18, 10);
 }
 
 function drawDeathScreen() {
-  fill(8, 10, 14, 220);
+  fill(12, 13, 16, 220);
   rect(0, 0, width, height);
 
-  fill(220, 90, 90, 80);
-  ellipse(width * 0.5, height * 0.34, 250, 250);
-  fill(220, 90, 90, 45);
-  ellipse(width * 0.5, height * 0.34, 320, 320);
+  fill(200, 88, 90, 60);
+  ellipse(width * 0.5, height * 0.34, 240, 240);
+  fill(200, 88, 90, 20);
+  ellipse(width * 0.5, height * 0.34, 300, 300);
 
-  fill(220, 90, 90);
+  fill(214, 88, 90);
   textSize(30);
   text("你走進了黑暗", width / 2, height * 0.33);
 
@@ -1549,27 +1700,27 @@ function drawDeathScreen() {
   textSize(14);
   text("你被「" + game.deathReason + "」吞沒，靈魂被重新拉回房間起點。", width / 2, height * 0.45);
 
-  fill(165, 214, 184);
+  fill(170, 214, 186);
   textSize(13);
   text("按 Enter / 空白 鍵返回房間起點", width / 2, height * 0.58);
 }
 
 function drawEndingScreen() {
-  fill(12, 15, 20, 220);
+  fill(14, 16, 20, 220);
   rect(0, 0, width, height);
 
-  fill(246, 220, 150, 75);
+  fill(244, 216, 150, 72);
   ellipse(width * 0.5, height * 0.2, 320, 180);
-  fill(246, 220, 150, 110);
+  fill(244, 216, 150, 110);
   ellipse(width * 0.5, height * 0.2, 200, 110);
 
-  fill(15, 18, 24, 200);
+  fill(18, 16, 14, 200);
   rect(width * 0.18, height * 0.18, width * 0.64, height * 0.48, 18);
   stroke(225, 220, 180, 100);
   rect(width * 0.18 + 2, height * 0.18 + 2, width * 0.64 - 4, height * 0.48 - 4, 18);
   noStroke();
 
-  fill(246, 220, 150);
+  fill(242, 220, 160);
   textSize(26);
   text(game.ending === "true" ? "真結局：月光的留聲" : "普通結局：離開房屋", width / 2, height * 0.29);
 
@@ -1591,7 +1742,7 @@ function drawEndingScreen() {
 }
 
 function drawSaveMenu() {
-  fill(12, 18, 24, 220);
+  fill(15, 16, 16, 225);
   rect(width * 0.28, height * 0.25, width * 0.44, height * 0.35, 12);
 
   fill(244, 214, 112);
@@ -1609,6 +1760,23 @@ function drawSaveMenu() {
   fill(170, 224, 184);
   textSize(11);
   text("按 1 / 2 / 3 儲存，或任意鍵離開", width / 2, height * 0.68);
+}
+
+function drawFilmVignette() {
+  noStroke();
+  for (let i = 0; i < 160; i++) {
+    const x = (i * 41 + frameCount * 0.8) % width;
+    const y = (i * 53 + frameCount * 0.6) % height;
+    fill(255, 255, 255, 8 + (i % 4));
+    rect(x, y, 2, 2);
+  }
+
+  const vignette = drawingContext.createRadialGradient(width / 2, height / 2, 80, width / 2, height / 2, width * 0.95);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(0.65, "rgba(0,0,0,0.12)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.62)");
+  drawingContext.fillStyle = vignette;
+  drawingContext.fillRect(0, 0, width, height);
 }
 
 function isAtSavePoint() {
