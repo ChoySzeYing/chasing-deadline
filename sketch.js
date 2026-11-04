@@ -5,18 +5,22 @@ let w = 48;
 let maze = [];
 let player = { x: 1, y: 1, dir: 0 };
 let goal = { x: 19, y: 13 };
-let gameState = "start"; // start / playing / win
+let ghosts = [];
+let gameState = "start";
 let startTime = 0;
 let elapsedTime = 0;
+let hitCooldown = 0;
 
 let bgOsc, bgEnv;
 let hitOsc, hitEnv;
 let winOsc, winEnv;
+let ghostOsc, ghostEnv;
 let audioStarted = false;
 
 function setup() {
   createCanvas(cols * w, rows * w);
   initMaze();
+  initGhosts();
 }
 
 function draw() {
@@ -29,14 +33,25 @@ function draw() {
 
   if (gameState === "playing") {
     elapsedTime = floor((millis() - startTime) / 1000);
+
+    if (hitCooldown > 0) hitCooldown--;
+
+    updateGhosts();
+    checkGhostCollision();
   }
 
   drawMaze();
+  drawGoal();
+  drawGhosts();
   drawPlayer();
   drawUI();
 
   if (gameState === "win") {
     drawWinScreen();
+  }
+
+  if (gameState === "lose") {
+    drawLoseScreen();
   }
 }
 
@@ -45,7 +60,7 @@ function initAudio() {
   audioStarted = true;
 
   bgOsc = new p5.Oscillator("sine");
-  bgEnv = new p5.Envelope(0.02, 0.2, 0.3, 1.4);
+  bgEnv = new p5.Envelope(0.02, 0.18, 0.25, 1.2);
   bgOsc.amp(bgEnv);
   bgOsc.start();
   playBGM();
@@ -59,25 +74,30 @@ function initAudio() {
   winEnv = new p5.Envelope(0.01, 0.35, 0.4, 1.8);
   winOsc.amp(winEnv);
   winOsc.start();
+
+  ghostOsc = new p5.Oscillator("sawtooth");
+  ghostEnv = new p5.Envelope(0.01, 0.08, 0, 0.1);
+  ghostOsc.amp(ghostEnv);
+  ghostOsc.start();
 }
 
 function playBGM() {
   if (!bgOsc || gameState !== "playing") return;
-  let notes = [130.81, 146.83, 164.81, 196, 164.81, 146.83];
+  let notes = [146.83, 130.81, 116.54, 130.81];
   let i = 0;
   function next() {
     if (gameState !== "playing") return;
     bgOsc.freq(notes[i]);
     bgEnv.play();
     i = (i + 1) % notes.length;
-    setTimeout(next, 680);
+    setTimeout(next, 760);
   }
   next();
 }
 
 function playHitSound() {
   if (!hitOsc) return;
-  hitOsc.freq(95);
+  hitOsc.freq(90);
   hitEnv.play();
 }
 
@@ -90,56 +110,65 @@ function playWinSound() {
   winEnv.play();
 }
 
+function playLoseSound() {
+  if (!ghostOsc) return;
+  ghostOsc.freq(180);
+  setTimeout(() => ghostOsc.freq(140), 220);
+  setTimeout(() => ghostOsc.freq(110), 440);
+  ghostEnv.play();
+}
+
 function drawBackground() {
-  background(8, 12, 24);
+  background(12, 16, 28);
+
   noStroke();
-  for (let i = 0; i < 90; i++) {
-    let sx = (i * 73 + frameCount * 0.02) % width;
-    let sy = (i * 131) % height;
-    let tw = (sin((frameCount + i * 20) * 0.03) + 1) * 0.5;
-    fill(180, 210, 255, 40 + tw * 60);
-    circle(sx, sy, 1.2 + tw);
+  for (let i = 0; i < 70; i++) {
+    let sx = (i * 97 + frameCount * 0.01) % width;
+    let sy = (i * 53) % height;
+    fill(120, 140, 180, 30);
+    circle(sx, sy, 1);
   }
-  fill(18, 28, 48, 180);
-  noStroke();
+
+  fill(18, 24, 42, 180);
   beginShape();
-  for (let x = 0; x <= width; x += 30) {
-    let y = height - 140 - sin(x * 0.01) * 40 - noise(x * 0.01) * 30;
+  for (let x = 0; x <= width; x += 28) {
+    let y = height - 120 - sin(x * 0.008) * 30 - noise(x * 0.01) * 24;
     vertex(x, y);
   }
   vertex(width, height);
   vertex(0, height);
   endShape(CLOSE);
+
   noFill();
-  stroke(80, 120, 200, 140);
+  stroke(120, 90, 180, 140);
   strokeWeight(4);
   rect(8, 8, width - 16, height - 16, 18);
   noStroke();
 }
 
 function drawStartScreen() {
-  fill(0, 0, 0, 160);
+  fill(0, 0, 0, 170);
   rect(0, 0, width, height);
   textAlign(CENTER, CENTER);
 
-  fill(255, 220, 100);
-  textSize(44);
-  text("迷宮探險", width / 2, height / 2 - 80);
+  fill(180, 140, 255);
+  textSize(46);
+  text("迷宮驚魂", width / 2, height / 2 - 90);
 
-  fill(220);
-  textSize(20);
-  text("方向鍵移動，搵到寶石就勝利", width / 2, height / 2 - 30);
+  fill(200);
+  textSize(18);
+  text("方向鍵移動，躲避鬼魂，取得寶石", width / 2, height / 2 - 30);
 
-  fill(100, 200, 255);
+  fill(110, 255, 220);
   textSize(22);
   let blink = sin(frameCount * 0.08) > 0;
   if (blink) {
     text("按 Enter 開始遊戲", width / 2, height / 2 + 20);
   }
 
-  fill(160);
-  textSize(16);
-  text("按 R 隨時重新開始", width / 2, height / 2 + 70);
+  fill(150);
+  textSize(15);
+  text("按 R 重新開始", width / 2, height / 2 + 70);
 }
 
 function drawWinScreen() {
@@ -147,14 +176,14 @@ function drawWinScreen() {
   rect(0, 0, width, height);
   textAlign(CENTER, CENTER);
 
-  fill(255, 215, 90);
+  fill(255, 220, 110);
   rectMode(CENTER);
   rect(width / 2, height / 2, 360, 200, 22);
   rectMode(CORNER);
 
   fill(30, 30, 50);
   textSize(34);
-  text("寶石取得！", width / 2, height / 2 - 40);
+  text("成功逃離！", width / 2, height / 2 - 40);
 
   fill(60, 60, 90);
   textSize(18);
@@ -168,6 +197,27 @@ function drawWinScreen() {
   }
 }
 
+function drawLoseScreen() {
+  fill(40, 0, 10, 200);
+  rect(0, 0, width, height);
+  textAlign(CENTER, CENTER);
+
+  fill(255, 90, 110);
+  textSize(40);
+  text("被鬼魂抓到！", width / 2, height / 2 - 40);
+
+  fill(200);
+  textSize(18);
+  text("堅持時間：" + elapsedTime + " 秒", width / 2, height / 2 + 10);
+
+  fill(255);
+  textSize(18);
+  let blink = sin(frameCount * 0.08) > 0;
+  if (blink) {
+    text("按 Enter / R 重新開始", width / 2, height / 2 + 50);
+  }
+}
+
 function initMaze() {
   for (let y = 0; y < rows; y++) {
     maze[y] = [];
@@ -175,9 +225,11 @@ function initMaze() {
       maze[y][x] = 1;
     }
   }
+
   let stack = [];
   maze[1][1] = 0;
   stack.push({ x: 1, y: 1 });
+
   while (stack.length > 0) {
     let current = stack[stack.length - 1];
     let neighbors = getUnvisitedNeighbors(current.x, current.y);
@@ -192,6 +244,7 @@ function initMaze() {
       stack.push(next);
     }
   }
+
   maze[goal.y][goal.x] = 0;
 }
 
@@ -204,11 +257,77 @@ function getUnvisitedNeighbors(x, y) {
   return neighbors;
 }
 
+function initGhosts() {
+  ghosts = [];
+  let count = 3;
+
+  for (let i = 0; i < count; i++) {
+    let gx, gy;
+    do {
+      gx = floor(random(2, cols - 2));
+      gy = floor(random(2, rows - 2));
+    } while (maze[gy][gx] === 1 || (gx < 5 && gy < 5));
+
+    ghosts.push({
+      x: gx,
+      y: gy,
+      moveTimer: 0,
+      moveInterval: 30 + i * 12
+    });
+  }
+}
+
+function updateGhosts() {
+  for (let g of ghosts) {
+    g.moveTimer++;
+    if (g.moveTimer >= g.moveInterval) {
+      g.moveTimer = 0;
+      moveGhost(g);
+    }
+  }
+}
+
+function moveGhost(g) {
+  let dirs = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 }
+  ];
+
+  dirs.sort((a, b) => {
+    let da = abs((g.x + a.dx) - player.x) + abs((g.y + a.dy) - player.y);
+    let db = abs((g.x + b.dx) - player.x) + abs((g.y + b.dy) - player.y);
+    return da - db;
+  });
+
+  for (let d of dirs) {
+    let nx = g.x + d.dx;
+    let ny = g.y + d.dy;
+    if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && maze[ny][nx] === 0) {
+      g.x = nx;
+      g.y = ny;
+      return;
+    }
+  }
+}
+
+function checkGhostCollision() {
+  for (let g of ghosts) {
+    if (g.x === player.x && g.y === player.y) {
+      gameState = "lose";
+      playLoseSound();
+      return;
+    }
+  }
+}
+
 function drawMaze() {
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       let cellX = x * w;
       let cellY = y * w;
+
       if (maze[y][x] === 1) {
         fill(42, 54, 82);
         noStroke();
@@ -232,13 +351,13 @@ function drawMaze() {
       }
     }
   }
-  drawGoal();
 }
 
 function drawGoal() {
   let x = goal.x * w + w / 2;
   let y = goal.y * w + w / 2;
   let pulse = sin(frameCount * 0.08) * 4;
+
   noStroke();
   fill(255, 215, 90, 110);
   circle(x, y, 30 + pulse);
@@ -248,37 +367,95 @@ function drawGoal() {
   circle(x - 5, y - 5, 6);
 }
 
+function drawGhosts() {
+  for (let g of ghosts) {
+    let x = g.x * w + w / 2;
+    let y = g.y * w + w / 2;
+    let wobble = sin(frameCount * 0.1 + g.x) * 2;
+
+    noStroke();
+    fill(180, 100, 255, 180);
+    beginShape();
+    ellipse(x, y + wobble, 26, 30);
+    endShape(CLOSE);
+
+    fill(255, 255, 255);
+    circle(x - 6, y - 4 + wobble, 6);
+    circle(x + 6, y - 4 + wobble, 6);
+
+    fill(0);
+    circle(x - 6, y - 4 + wobble, 3);
+    circle(x + 6, y - 4 + wobble, 3);
+  }
+}
+
 function drawPlayer() {
   let cx = player.x * w + w / 2;
   let cy = player.y * w + w / 2;
-  push();
-  translate(cx, cy);
+  let bob = sin(frameCount * 0.15) * 1.5;
 
-  // 身體
-  fill(20, 180, 220);
-  ellipse(0, 6, 24, 28);
-  // 頭
-  fill(255, 224, 196);
-  circle(0, -8, 20);
-  // 頭髮
-  fill(60, 40, 30);
-  arc(0, -12, 18, 12, PI, TWO_PI);
-  // 眼
+  push();
+  translate(cx, cy + bob);
+
+  fill(0, 255, 180, 80);
+  noStroke();
+  circle(0, 14, 20);
+
+  fill(60, 180, 255);
+  stroke(30, 110, 180);
+  strokeWeight(2);
+  beginShape();
+  ellipse(0, 4, 10, 12);
+  endShape(CLOSE);
+
+  noStroke();
+  fill(255, 210, 160);
+  circle(0, -8, 11);
+
+  fill(90, 60, 40);
+  beginShape();
+  arc(0, -10, 12, 8, PI, TWO_PI);
+  endShape(CLOSE);
+
   fill(20);
-  if (player.dir === 1) circle(4, -9, 3);
-  else if (player.dir === -1) circle(-4, -9, 3);
-  else {
-    circle(-4, -9, 3);
-    circle(4, -9, 3);
+  if (player.dir === 1) {
+    ellipse(4, -8, 1.8, 2.4);
+  } else if (player.dir === -1) {
+    ellipse(-4, -8, 1.8, 2.4);
+  } else {
+    ellipse(-3, -8, 1.8, 2.4);
+    ellipse(3, -8, 1.8, 2.4);
   }
+
+  fill(220, 50, 80);
+  stroke(160, 30, 50);
+  strokeWeight(1.5);
+  beginShape();
+  moveTo(-7, -12);
+  lineTo(7, -12);
+  lineTo(5, -18);
+  lineTo(-5, -18);
+  endShape(CLOSE);
+
   pop();
 }
 
 function drawUI() {
+  fill(10, 16, 32, 200);
+  noStroke();
+  rect(12, 12, 180, 42, 12);
+  stroke(120, 90, 180, 160);
+  strokeWeight(1);
+  rect(12, 12, 180, 42, 12);
+
   fill(255);
-  textSize(16);
+  noStroke();
+  textSize(14);
   textAlign(LEFT, TOP);
-  text("⏱ 時間：" + elapsedTime + " s", 16, 16);
+  text("迷宮驚魂", 24, 20);
+  textSize(12);
+  fill(180, 210, 255);
+  text("時間：" + elapsedTime + "s", 24, 38);
 }
 
 function keyPressed() {
@@ -291,7 +468,7 @@ function keyPressed() {
     return;
   }
 
-  if (gameState === "win") {
+  if (gameState === "win" || gameState === "lose") {
     if (keyCode === ENTER || key === "r" || key === "R") {
       resetGame();
     }
@@ -321,16 +498,23 @@ function keyPressed() {
 function movePlayer(dx, dy) {
   let nx = player.x + dx;
   let ny = player.y + dy;
+
   if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
     if (maze[ny][nx] === 0) {
       player.x = nx;
       player.y = ny;
       checkWin();
     } else {
-      playHitSound();
+      if (hitCooldown === 0) {
+        playHitSound();
+        hitCooldown = 8;
+      }
     }
   } else {
-    playHitSound();
+    if (hitCooldown === 0) {
+      playHitSound();
+      hitCooldown = 8;
+    }
   }
 }
 
@@ -346,6 +530,8 @@ function startGame() {
   gameState = "playing";
   startTime = millis();
   initMaze();
+  initGhosts();
+  playBGM();
 }
 
 function resetGame() {
@@ -353,4 +539,6 @@ function resetGame() {
   gameState = "playing";
   startTime = millis();
   initMaze();
+  initGhosts();
+  playBGM();
 }
