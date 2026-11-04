@@ -1,33 +1,23 @@
-# Chasing Deadline
+# Maze RPG Prototype
 HDAT2102 Emerging Technologies – Interactive Game Prototype
 
 ## Concept
-This is a survival resource-management game visualising student burnout.
-The player must finish tasks before energy runs out, while avoiding unexpected stressors and seeking limited rest opportunities.
+This is a simple tile-based maze RPG built with p5.js. The player controls a character inside a closed maze, navigates around walls, and tries to reach the treasure to win. The project explores basic interactive gameplay, collision detection and state switching without external image assets or audio.
 
 ## Interaction
-- WASD / Arrow keys: move your character
-- Space: start / restart game
-- Blue circles: tasks, stay inside to gain progress
-- Red moving circles: stress hazards, collide to lose energy
-- Green circles: rest spots to recover energy
-- Win: fill task progress before energy hits zero
-- Lose: energy drops to zero → burnout
+- Arrow keys: move the player up / down / left / right
+- Wall collision: the character cannot pass through walls
+- Goal: reach the golden treasure tile
+- Win: a victory screen appears once the treasure is reached
 
-## Input–Process–Output
-- Input: keyboard
-- Process: collision detection, energy decay, spawn system, state machine (start / play / win / lose)
-- Output: player movement, UI bars, game screens
+## Input-Process-Output
+- **Input**: Keyboard arrow keys
+- **Process**: Position update, wall collision checking, goal detection, game state switching
+- **Output**: Player rendering, maze rendering, treasure rendering, win message
 
 ## Technical Stack
-p5.js, hosted on GitHub Pages
-
-## Iteration Log
-- Version 1: basic movement + static task
-- Version 2: add moving hazards, rest points
-- Version 3: win/lose screen, space restart, gradual difficulty
-- Version 4: tune energy decay for better balance
-
-## Credits
-p5.js library
-Original concept & code for HDAT2102
+- p5.js (loaded via CDN)
+- HTML
+- CSS
+- Vanilla JavaScript
+- Deployed with GitHub Pages
