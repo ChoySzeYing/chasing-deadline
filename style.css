@@ -1,18 +1,11 @@
 :root {
-  --page-bg-1: #0f1720;
-  --page-bg-2: #1b2d39;
-  --panel: rgba(18, 26, 35, 0.85);
-  --border: #8fe1bc;
-  --text: #edf4f8;
-  --soft: #acbfce;
-  --gold: #f6d27a;
-  --wall: #5f6f7b;
-  --floor: #2a3e4d;
-  --floor-alt: #365367;
-  --hero: #f7c98a;
-  --hero-dark: #b87a42;
-  --npc: #98d4f4;
-  --goal: #f7d666;
+  --bg-1: #0b1320;
+  --bg-2: #1c2d3b;
+  --panel: rgba(11, 18, 25, 0.76);
+  --border: #94e0c7;
+  --text: #edf7ff;
+  --gold: #f9d67a;
+  --soft: #d7e5f0;
 }
 
 * {
@@ -23,9 +16,11 @@ html, body {
   margin: 0;
   width: 100%;
   min-height: 100%;
-  background: linear-gradient(180deg, var(--page-bg-1), var(--page-bg-2));
-  color: var(--text);
   font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
+  color: var(--text);
+  background:
+    linear-gradient(rgba(13, 20, 30, 0.18), rgba(13, 20, 30, 0.42)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1800' height='1000' viewBox='0 0 1800 1000'%3E%3Crect width='1800' height='1000' fill='%230b1320'/%3E%3Ccircle cx='1350' cy='180' r='120' fill='%23f3e9bf' opacity='0.88'/%3E%3Cpath d='M0 620 L210 500 L390 620 L620 440 L860 620 L1090 470 L1380 620 L1600 520 L1800 620 L1800 1000 L0 1000 Z' fill='%23182939'/%3E%3Cpath d='M0 720 L270 600 L520 720 L760 540 L1020 720 L1270 610 L1540 720 L1800 680 L1800 1000 L0 1000 Z' fill='%232e4054'/%3E%3Cpath d='M0 820 L160 780 L310 820 L480 760 L680 820 L860 780 L1090 820 L1260 770 L1470 820 L1800 790 L1800 1000 L0 1000 Z' fill='%23314b61'/%3E%3C/svg%3E") center/cover no-repeat;
 }
 
 body {
@@ -39,35 +34,37 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 18px 20px 16px;
+  gap: 14px;
+  padding: 18px 22px 16px;
   border-radius: 18px;
   background: var(--panel);
   border: 3px solid var(--border);
-  box-shadow: 0 0 0 4px rgba(143, 225, 188, 0.2), 0 20px 40px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 0 0 4px rgba(148, 224, 199, 0.12),
+    0 22px 48px rgba(0, 0, 0, 0.38);
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(1.5rem, 2vw, 2rem);
-  letter-spacing: 0.12em;
+  font-size: clamp(1.5rem, 2vw, 2.2rem);
+  letter-spacing: 0.18em;
   color: var(--gold);
-  text-shadow: 0 0 12px rgba(246, 210, 122, 0.35);
+  text-shadow: 0 0 14px rgba(249, 214, 122, 0.4);
 }
 
 #game {
   display: inline-block;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  background: #111a23;
+  background: rgba(11, 16, 22, 0.86);
   border: 2px solid rgba(255, 255, 255, 0.08);
 }
 
 canvas {
   display: block;
-  width: min(86vw, 560px);
+  width: min(88vw, 760px);
   height: auto;
-  background: #101820;
+  background: #0f1720;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
